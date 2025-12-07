@@ -27,6 +27,9 @@ export default defineConfig({
     open: true,
   },
   optimizeDeps: {
-    exclude: ['@supabase/supabase-js'],
+    include: ['@supabase/supabase-js'],
+  },
+  define: {
+    global: 'globalThis',
   },
 });
