@@ -12,9 +12,26 @@ export const Navbar = () => {
   const { isAdmin } = useAppStore();
   const location = useLocation();
 
-  const navLinks = [
+  const navLinks: Array<{ path?: string; label: string; submenu?: Array<{ path: string; label: string }> }> = [
     { path: '/', label: 'Home' },
     { path: '/projects', label: 'Projects' },
+    {
+      label: 'Learn',
+      submenu: [
+        { path: '/how-it-works', label: 'How It Works' },
+        { path: '/resources', label: 'Resources' },
+        { path: '/faq', label: 'FAQ' },
+        { path: '/blog', label: 'Blog' },
+      ]
+    },
+    {
+      label: 'Company',
+      submenu: [
+        { path: '/about', label: 'About Us' },
+        { path: '/careers', label: 'Careers' },
+        { path: '/support', label: 'Support' },
+      ]
+    },
     { path: '/dashboard', label: 'Dashboard' },
     ...(isAdmin ? [{ path: '/admin', label: 'Admin' }] : []),
   ];
@@ -46,27 +63,52 @@ export const Navbar = () => {
           </Link>
 
           <div className="hidden md:flex items-center gap-8">
-            {navLinks.map(link => (
-              <Link
-                key={link.path}
-                to={link.path}
-                className={`font-medium transition-colors relative ${
-                  isActive(link.path)
-                    ? 'text-white'
-                    : 'text-text-secondary hover:text-white'
-                }`}
-              >
-                {link.label}
-                {isActive(link.path) && (
-                  <motion.div
-                    layoutId="navIndicator"
-                    className="absolute -bottom-[21px] left-0 right-0 h-0.5 bg-gradient-primary"
-                    initial={false}
-                    transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-                  />
-                )}
-              </Link>
-            ))}
+            {navLinks.map(link => {
+              if (link.submenu) {
+                return (
+                  <div key={link.label} className="relative group">
+                    <button className="font-medium text-text-secondary hover:text-white transition-colors flex items-center gap-1">
+                      {link.label}
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    <div className="absolute top-full left-0 mt-2 w-48 glass-card rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+                      {link.submenu.map(sublink => (
+                        <Link
+                          key={sublink.path}
+                          to={sublink.path}
+                          className="block px-4 py-3 text-text-secondary hover:text-white hover:bg-white/5 first:rounded-t-lg last:rounded-b-lg transition-colors"
+                        >
+                          {sublink.label}
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                );
+              }
+              return (
+                <Link
+                  key={link.path || link.label}
+                  to={link.path || '/'}
+                  className={`font-medium transition-colors relative ${
+                    link.path && isActive(link.path)
+                      ? 'text-white'
+                      : 'text-text-secondary hover:text-white'
+                  }`}
+                >
+                  {link.label}
+                  {link.path && isActive(link.path) && (
+                    <motion.div
+                      layoutId="navIndicator"
+                      className="absolute -bottom-[21px] left-0 right-0 h-0.5 bg-gradient-primary"
+                      initial={false}
+                      transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                    />
+                  )}
+                </Link>
+              );
+            })}
           </div>
 
           <div className="hidden md:block">
@@ -123,18 +165,39 @@ export const Navbar = () => {
             className="md:hidden mt-4 pt-4 border-t border-white/10"
           >
             <div className="flex flex-col gap-4">
-              {navLinks.map(link => (
-                <Link
-                  key={link.path}
-                  to={link.path}
-                  onClick={() => setIsMenuOpen(false)}
-                  className={`font-medium transition-colors ${
-                    isActive(link.path) ? 'text-white' : 'text-text-secondary'
-                  }`}
-                >
-                  {link.label}
-                </Link>
-              ))}
+              {navLinks.map(link => {
+                if (link.submenu) {
+                  return (
+                    <div key={link.label}>
+                      <div className="font-medium text-white mb-2">{link.label}</div>
+                      <div className="flex flex-col gap-2 pl-4">
+                        {link.submenu.map(sublink => (
+                          <Link
+                            key={sublink.path}
+                            to={sublink.path}
+                            onClick={() => setIsMenuOpen(false)}
+                            className="font-medium text-text-secondary hover:text-white transition-colors"
+                          >
+                            {sublink.label}
+                          </Link>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                }
+                return (
+                  <Link
+                    key={link.path || link.label}
+                    to={link.path || '/'}
+                    onClick={() => setIsMenuOpen(false)}
+                    className={`font-medium transition-colors ${
+                      link.path && isActive(link.path) ? 'text-white' : 'text-text-secondary'
+                    }`}
+                  >
+                    {link.label}
+                  </Link>
+                );
+              })}
               <div className="pt-4 border-t border-white/10">
                 {isConnected ? (
                   <div className="space-y-2">

@@ -10,7 +10,7 @@ export const Footer = () => {
       { label: 'How It Works', path: '/how-it-works' },
     ],
     resources: [
-      { label: 'Documentation', path: '/docs' },
+      { label: 'Resources', path: '/resources' },
       { label: 'FAQ', path: '/faq' },
       { label: 'Support', path: '/support' },
     ],
