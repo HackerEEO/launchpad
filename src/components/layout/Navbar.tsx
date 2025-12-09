@@ -5,12 +5,18 @@ import { useWallet } from '@/hooks/useWallet';
 import { useAppStore } from '@/store/appStore';
 import { formatWalletAddress } from '@/utils/helpers';
 import { Button } from '@/components/ui/Button';
+import { WalletModal, WalletType } from '@/components/wallet/WalletModal';
 
 export const Navbar = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const { address, isConnected, connect, disconnect, balance } = useWallet();
+  const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
+  const { address, isConnected, connect, disconnect, balance, isConnecting } = useWallet();
   const { isAdmin } = useAppStore();
   const location = useLocation();
+
+  const handleSelectWallet = async (walletType: WalletType) => {
+    await connect(walletType);
+  };
 
   const navLinks: Array<{ path?: string; label: string; submenu?: Array<{ path: string; label: string }> }> = [
     { path: '/', label: 'Home' },
@@ -123,7 +129,7 @@ export const Navbar = () => {
                 </Button>
               </div>
             ) : (
-              <Button onClick={connect}>Connect Wallet</Button>
+              <Button onClick={() => setIsWalletModalOpen(true)}>Connect Wallet</Button>
             )}
           </div>
 
@@ -210,7 +216,7 @@ export const Navbar = () => {
                     </Button>
                   </div>
                 ) : (
-                  <Button onClick={connect} className="w-full">
+                  <Button onClick={() => setIsWalletModalOpen(true)} className="w-full">
                     Connect Wallet
                   </Button>
                 )}
@@ -219,6 +225,14 @@ export const Navbar = () => {
           </motion.div>
         )}
       </div>
+
+      {/* Wallet Modal */}
+      <WalletModal
+        isOpen={isWalletModalOpen}
+        onClose={() => setIsWalletModalOpen(false)}
+        onSelectWallet={handleSelectWallet}
+        isConnecting={isConnecting}
+      />
     </nav>
   );
 };

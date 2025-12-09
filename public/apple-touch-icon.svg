@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6366f1;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#8b5cf6;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background for Apple touch icon -->
+  <rect x="0" y="0" width="180" height="180" rx="36" fill="url(#grad)"/>
+  
+  <!-- Lightning bolt icon -->
+  <path d="M98 30 L63 92 L85 92 L77 150 L122 77 L96 77 L98 30Z" 
+        fill="white" 
+        stroke="rgba(255,255,255,0.3)" 
+        stroke-width="2"
+        stroke-linejoin="round"/>
+</svg>

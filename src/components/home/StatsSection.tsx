@@ -128,14 +128,24 @@ export const StatsSection = () => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: index * 0.1 }}
-              className="glass-card p-8 hover:bg-card-hover transition-all group"
+              className="glass-card p-6 md:p-8 hover:bg-card-hover transition-all group"
             >
-              <div className={`inline-flex p-3 rounded-lg bg-gradient-to-br ${stat.color} mb-4 group-hover:scale-110 transition-transform`}>
+              <div
+                className={`inline-flex p-3 rounded-lg bg-gradient-to-br ${stat.color} mb-4 group-hover:scale-110 transition-transform`}
+              >
                 {stat.icon}
               </div>
-              <div className="text-3xl md:text-4xl font-bold text-white mb-2">
+
+              <div
+                className="font-bold text-white mb-2 max-w-full break-words"
+                style={{
+                  fontSize: 'clamp(1.25rem, 4.5vw, 2.5rem)',
+                  lineHeight: 1.05,
+                }}
+              >
                 {stat.value}
               </div>
+
               <div className="text-text-muted">{stat.label}</div>
             </motion.div>
           ))}

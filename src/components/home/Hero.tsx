@@ -1,15 +1,97 @@
+import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/Button';
 
+type CountUpProps = {
+  value: string;
+  duration?: number; // ms
+  className?: string;
+};
+
+const parseValue = (v: string) => {
+  const firstDigitIdx = v.search(/\d/);
+  if (firstDigitIdx === -1) return { prefix: '', number: 0, suffix: v };
+  const before = v.slice(0, firstDigitIdx);
+  const afterDigits = v.slice(firstDigitIdx);
+  const match = afterDigits.match(/^(\d+(\.\d+)?)/);
+  const numStr = match ? match[0] : '0';
+  const after = afterDigits.slice(numStr.length);
+  const num = parseFloat(numStr.replace(/,/g, '')) || 0;
+  return { prefix: before, number: num, suffix: after };
+};
+
+const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
+
+const CountUp: React.FC<CountUpProps> = ({ value, duration = 1500, className }) => {
+  const { prefix, number: target, suffix } = parseValue(value);
+  const [current, setCurrent] = useState(0);
+  const rafRef = useRef<number | null>(null);
+  const startRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    startRef.current = null;
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+
+    const step = (time: number) => {
+      if (!startRef.current) startRef.current = time;
+      const elapsed = time - startRef.current;
+      const progress = Math.min(1, elapsed / duration);
+      const eased = easeOutCubic(progress);
+      setCurrent(target * eased);
+      if (progress < 1) {
+        rafRef.current = requestAnimationFrame(step);
+      } else {
+        rafRef.current = null;
+      }
+    };
+
+    rafRef.current = requestAnimationFrame(step);
+
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, [value, target, duration]);
+
+  const formatted = (() => {
+    if (/[KMGBkmgb]/.test(suffix)) {
+      return String(Math.round(current));
+    }
+    
+    if (target >= 1000) {
+      return Math.round(current).toLocaleString();
+    }
+
+    if (target % 1 === 0) return String(Math.round(current));
+    return current.toFixed(2);
+  })();
+
+  return (
+    <div className={className}>
+      <span>{prefix}</span>
+      <span className="font-bold">{formatted}</span>
+      <span>{suffix}</span>
+    </div>
+  );
+};
+
 export const Hero = () => {
+  const stats = [
+    { value: '$50M+', label: 'Total Raised' },
+    { value: '100+', label: 'Projects Launched' },
+    { value: '50K+', label: 'Investors' },
+  ];
+
   return (
     <section className="relative py-20 md:py-32 overflow-hidden">
       <div className="absolute inset-0 bg-gradient-to-br from-primary/20 via-transparent to-cyan/20 animate-gradient" />
 
       <div className="absolute inset-0">
         <div className="absolute top-20 left-10 w-72 h-72 bg-primary/30 rounded-full filter blur-3xl animate-pulse-slow" />
-        <div className="absolute bottom-20 right-10 w-96 h-96 bg-cyan/30 rounded-full filter blur-3xl animate-pulse-slow" style={{ animationDelay: '1s' }} />
+        <div
+          className="absolute bottom-20 right-10 w-96 h-96 bg-cyan/30 rounded-full filter blur-3xl animate-pulse-slow"
+          style={{ animationDelay: '1s' }}
+        />
       </div>
 
       <div className="container mx-auto px-4 relative z-10">
@@ -70,14 +152,10 @@ export const Hero = () => {
             transition={{ duration: 0.6, delay: 0.4 }}
             className="mt-16 grid grid-cols-3 gap-8 max-w-3xl mx-auto"
           >
-            {[
-              { value: '$50M+', label: 'Total Raised' },
-              { value: '100+', label: 'Projects Launched' },
-              { value: '50K+', label: 'Investors' },
-            ].map((stat, index) => (
+            {stats.map((stat, index) => (
               <div key={index} className="glass-card p-6">
                 <div className="text-3xl md:text-4xl font-bold gradient-text mb-2">
-                  {stat.value}
+                  <CountUp value={stat.value} />
                 </div>
                 <div className="text-text-muted text-sm">{stat.label}</div>
               </div>

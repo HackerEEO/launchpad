@@ -3,6 +3,7 @@ import { useWalletStore } from '@/store/walletStore';
 import { web3Service } from '@/lib/web3';
 import { usersService } from '@/services/users.service';
 import { useAppStore } from '@/store/appStore';
+import type { WalletType } from '@/components/wallet/WalletModal';
 
 export const useWallet = () => {
   const {
@@ -31,8 +32,8 @@ export const useWallet = () => {
     }
   }, [address, setIsAdmin, setCurrentUser]);
 
-  const connect = async () => {
-    await web3Service.connectWallet();
+  const connect = async (walletType: WalletType = 'metamask') => {
+    await web3Service.connectWallet(walletType);
   };
 
   const disconnect = async () => {
@@ -55,6 +56,10 @@ export const useWallet = () => {
     return await web3Service.sendTransaction(to, value);
   };
 
+  const getWalletType = () => {
+    return web3Service.getWalletType();
+  };
+
   return {
     address,
     balance,
@@ -67,5 +72,6 @@ export const useWallet = () => {
     getBalance,
     estimateGas,
     sendTransaction,
+    getWalletType,
   };
 };

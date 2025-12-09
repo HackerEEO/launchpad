@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6366f1;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#8b5cf6;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background rounded rectangle for maskable -->
+  <rect x="0" y="0" width="192" height="192" rx="40" fill="url(#grad)"/>
+  
+  <!-- Lightning bolt icon - centered -->
+  <path d="M105 35 L68 100 L90 100 L82 157 L128 82 L102 82 L105 35Z" 
+        fill="white" 
+        stroke="rgba(255,255,255,0.3)" 
+        stroke-width="2"
+        stroke-linejoin="round"/>
+</svg>
