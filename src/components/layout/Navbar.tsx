@@ -45,6 +45,7 @@ export const Navbar = () => {
   const isActive = (path: string) => location.pathname === path;
 
   return (
+    <>
     <nav className="sticky top-0 z-30 glass-card border-b border-white/10">
       <div className="container mx-auto px-4 py-4">
         <div className="flex items-center justify-between">
@@ -225,14 +226,15 @@ export const Navbar = () => {
           </motion.div>
         )}
       </div>
-
-      {/* Wallet Modal */}
-      <WalletModal
-        isOpen={isWalletModalOpen}
-        onClose={() => setIsWalletModalOpen(false)}
-        onSelectWallet={handleSelectWallet}
-        isConnecting={isConnecting}
-      />
     </nav>
+
+    {/* Wallet Modal - Rendered outside nav to avoid z-index issues */}
+    <WalletModal
+      isOpen={isWalletModalOpen}
+      onClose={() => setIsWalletModalOpen(false)}
+      onSelectWallet={handleSelectWallet}
+      isConnecting={isConnecting}
+    />
+  </>
   );
 };

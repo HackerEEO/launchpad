@@ -1,8 +1,12 @@
-import { BrowserProvider, formatEther, parseEther } from 'ethers';
+import { BrowserProvider, formatEther, parseEther, JsonRpcSigner } from 'ethers';
+import EthereumProvider from '@walletconnect/ethereum-provider';
 import { DEFAULT_CHAIN, CHAIN_CONFIG } from '@/config/web3';
 import { useWalletStore } from '@/store/walletStore';
 import toast from 'react-hot-toast';
 import type { WalletType } from '@/components/wallet/WalletModal';
+
+// WalletConnect Project ID - Get from https://cloud.walletconnect.com
+const WALLETCONNECT_PROJECT_ID = (import.meta as any).env?.VITE_WALLETCONNECT_PROJECT_ID || 'demo-project-id';
 
 declare global {
   interface Window {
@@ -10,164 +14,270 @@ declare global {
   }
 }
 
+type EthereumProviderType = InstanceType<typeof EthereumProvider>;
+
+interface ProviderState {
+  provider: BrowserProvider | null;
+  rawProvider: any;
+  walletType: WalletType | null;
+  wcProvider: EthereumProviderType | null;
+}
+
 class Web3Service {
-  private provider: BrowserProvider | null = null;
-  private currentWalletType: WalletType | null = null;
+  private state: ProviderState = {
+    provider: null,
+    rawProvider: null,
+    walletType: null,
+    wcProvider: null,
+  };
 
   /**
-   * Get the appropriate provider based on wallet type
+   * Get the appropriate injected provider based on wallet type
    */
-  private getProvider(walletType: WalletType): any {
-    if (!window.ethereum) {
+  private getInjectedProvider(walletType: WalletType): any {
+    if (typeof window === 'undefined' || !window.ethereum) {
       return null;
     }
 
-    // Handle multiple injected providers
-    const providers = window.ethereum.providers;
-    
-    if (providers && Array.isArray(providers)) {
-      switch (walletType) {
-        case 'metamask':
-          return providers.find((p: any) => p.isMetaMask && !p.isCoinbaseWallet);
-        case 'coinbase':
-          return providers.find((p: any) => p.isCoinbaseWallet);
-        case 'trust':
-          return providers.find((p: any) => p.isTrust);
-        default:
-          return providers[0];
-      }
-    }
+    try {
+      const providers = window.ethereum.providers;
+      
+      // Filter out problematic extensions that can cause errors
+      const isValidProvider = (p: any) => {
+        if (!p) return false;
+        // Skip known problematic wallet extensions
+        if (p.isOkxWallet || p.isSubWallet || p.evmAsk) return false;
+        return true;
+      };
 
-    // Single provider case
-    return window.ethereum;
+      if (providers && Array.isArray(providers)) {
+        const validProviders = providers.filter(isValidProvider);
+        
+        switch (walletType) {
+          case 'metamask': {
+            const mmProvider = validProviders.find((p: any) => p.isMetaMask && !p.isCoinbaseWallet && !p.isBraveWallet);
+            return mmProvider || null;
+          }
+          case 'coinbase': {
+            const cbProvider = validProviders.find((p: any) => p.isCoinbaseWallet);
+            return cbProvider || null;
+          }
+          case 'trust': {
+            const trustProvider = validProviders.find((p: any) => p.isTrust || p.isTrustWallet);
+            return trustProvider || null;
+          }
+          case 'injected': {
+            // For "injected", just return the first valid provider or fallback to window.ethereum
+            return validProviders[0] || (isValidProvider(window.ethereum) ? window.ethereum : null);
+          }
+          default:
+            return null;
+        }
+      }
+
+      // Single provider scenario - check if it's valid first
+      if (!isValidProvider(window.ethereum)) {
+        return null;
+      }
+
+      if (walletType === 'metamask' && window.ethereum.isMetaMask) {
+        return window.ethereum;
+      }
+      if (walletType === 'coinbase' && window.ethereum.isCoinbaseWallet) {
+        return window.ethereum;
+      }
+      if (walletType === 'trust' && (window.ethereum.isTrust || window.ethereum.isTrustWallet)) {
+        return window.ethereum;
+      }
+      if (walletType === 'injected') {
+        return window.ethereum;
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Error getting injected provider:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Initialize WalletConnect provider
+   */
+  private async initWalletConnect(): Promise<EthereumProviderType> {
+    const wcProvider = await EthereumProvider.init({
+      projectId: WALLETCONNECT_PROJECT_ID,
+      chains: [DEFAULT_CHAIN.chainId],
+      optionalChains: [1, 137, 42161, 10], // ETH Mainnet, Polygon, Arbitrum, Optimism
+      showQrModal: true,
+      metadata: {
+        name: 'CryptoLaunch',
+        description: 'Professional Token Launchpad Platform',
+        url: window.location.origin,
+        icons: [`${window.location.origin}/icon-192x192.png`],
+      },
+    });
+
+    return wcProvider;
   }
 
   /**
    * Connect wallet with specified type
    */
   async connectWallet(walletType: WalletType = 'metamask'): Promise<string | null> {
-    // For WalletConnect, we need to handle it differently
-    if (walletType === 'walletconnect') {
-      return this.connectWithWalletConnect();
-    }
-
-    const ethereumProvider = this.getProvider(walletType);
-
-    if (!ethereumProvider) {
-      const walletNames: Record<WalletType, string> = {
-        metamask: 'MetaMask',
-        walletconnect: 'WalletConnect',
-        coinbase: 'Coinbase Wallet',
-        trust: 'Trust Wallet',
-        injected: 'a Web3 wallet',
-      };
-      toast.error(`Please install ${walletNames[walletType]} to use this feature`);
-      return null;
-    }
-
     try {
       useWalletStore.getState().setConnecting(true);
-      this.currentWalletType = walletType;
 
-      const provider = new BrowserProvider(ethereumProvider);
-      this.provider = provider;
+      let rawProvider: any;
+      let address: string;
 
-      const accounts = await ethereumProvider.request({
-        method: 'eth_requestAccounts',
-      });
+      if (walletType === 'walletconnect') {
+        // Initialize and connect WalletConnect
+        try {
+          const wcProvider = await this.initWalletConnect();
+          await wcProvider.enable();
+          
+          rawProvider = wcProvider;
+          this.state.wcProvider = wcProvider;
+          
+          const accounts = wcProvider.accounts;
+          if (!accounts || accounts.length === 0) {
+            throw new Error('No accounts found');
+          }
+          address = accounts[0];
 
-      if (accounts.length === 0) {
-        throw new Error('No accounts found');
+          // Setup WalletConnect listeners
+          this.setupWalletConnectListeners(wcProvider);
+        } catch (wcError: any) {
+          console.error('WalletConnect error:', wcError);
+          throw new Error(wcError.message || 'Failed to connect with WalletConnect');
+        }
+      } else {
+        // Use injected provider (MetaMask, Coinbase, Trust, etc.)
+        rawProvider = this.getInjectedProvider(walletType);
+
+        if (!rawProvider) {
+          const walletNames: Record<WalletType, string> = {
+            metamask: 'MetaMask',
+            walletconnect: 'WalletConnect',
+            coinbase: 'Coinbase Wallet',
+            trust: 'Trust Wallet',
+            injected: 'a Web3 wallet',
+          };
+          toast.error(`Please install ${walletNames[walletType]} to continue`);
+          useWalletStore.getState().setConnecting(false);
+          return null;
+        }
+
+        try {
+          const accounts = await rawProvider.request({
+            method: 'eth_requestAccounts',
+          });
+
+          if (!accounts || accounts.length === 0) {
+            throw new Error('No accounts found');
+          }
+          address = accounts[0];
+        } catch (reqError: any) {
+          console.error('Provider request error:', reqError);
+          // Check if it's a specific wallet error
+          if (reqError.message?.includes('Unexpected error')) {
+            throw new Error('Wallet extension error. Try refreshing the page or using a different wallet.');
+          }
+          throw reqError;
+        }
+
+        // Setup injected provider listeners
+        this.setupInjectedListeners(rawProvider);
       }
 
-      const address = accounts[0];
+      // Create ethers provider
+      const provider = new BrowserProvider(rawProvider);
+      this.state.provider = provider;
+      this.state.rawProvider = rawProvider;
+      this.state.walletType = walletType;
+
+      // Get network and balance
       const network = await provider.getNetwork();
       const chainId = Number(network.chainId);
-
-      if (chainId !== DEFAULT_CHAIN.chainId) {
-        await this.switchNetwork();
-      }
-
       const balance = await this.getBalance(address);
 
+      // Switch to correct network if needed
+      if (chainId !== DEFAULT_CHAIN.chainId) {
+        const switched = await this.switchNetwork();
+        if (!switched) {
+          toast.error(`Please switch to ${DEFAULT_CHAIN.name} network`);
+        }
+      }
+
+      // Update store
       useWalletStore.getState().setAddress(address);
       useWalletStore.getState().setChainId(chainId);
       useWalletStore.getState().setBalance(balance);
       useWalletStore.getState().setConnected(true);
       useWalletStore.getState().setConnecting(false);
 
-      this.setupListeners(ethereumProvider);
-
       toast.success('Wallet connected successfully');
       return address;
     } catch (error: any) {
-      console.error('Error connecting wallet:', error);
+      console.error('Wallet connection error:', error);
       useWalletStore.getState().setConnecting(false);
-      
-      // Handle specific error messages
-      if (error.code === 4001) {
+
+      // Handle specific errors
+      if (error.code === 4001 || error.message?.includes('rejected')) {
         toast.error('Connection request rejected');
       } else if (error.code === -32002) {
-        toast.error('Connection request pending. Please check your wallet.');
+        toast.error('Connection pending. Check your wallet.');
+      } else if (error.message?.includes('Unexpected error')) {
+        toast.error('Wallet extension error. Try refreshing or use a different wallet.');
       } else {
         toast.error(error.message || 'Failed to connect wallet');
       }
+      
       return null;
     }
   }
 
   /**
-   * Connect using WalletConnect (simplified version)
-   * For full WalletConnect support, you'd need to install @walletconnect/ethereum-provider
+   * Disconnect wallet
    */
-  private async connectWithWalletConnect(): Promise<string | null> {
-    try {
-      useWalletStore.getState().setConnecting(true);
-      
-      // Check if there's an existing WalletConnect session in localStorage
-      // For proper WalletConnect v2 implementation, you need:
-      // npm install @walletconnect/ethereum-provider @walletconnect/modal
-      
-      toast.error('WalletConnect requires additional setup. Please use MetaMask or another browser wallet for now.');
-      
-      // Placeholder for WalletConnect implementation
-      // In production, you would:
-      // 1. Import WalletConnectProvider from @walletconnect/ethereum-provider
-      // 2. Create a new provider instance with your project ID
-      // 3. Enable the provider and get accounts
-      
-      useWalletStore.getState().setConnecting(false);
-      return null;
-    } catch (error: any) {
-      console.error('WalletConnect error:', error);
-      useWalletStore.getState().setConnecting(false);
-      toast.error('WalletConnect connection failed');
-      return null;
-    }
-  }
-
   async disconnectWallet(): Promise<void> {
-    this.provider = null;
-    this.currentWalletType = null;
-    useWalletStore.getState().disconnect();
-    this.removeListeners();
-    toast.success('Wallet disconnected');
+    try {
+      // Disconnect WalletConnect if active
+      if (this.state.wcProvider) {
+        await this.state.wcProvider.disconnect();
+      }
+
+      // Remove listeners
+      this.removeAllListeners();
+
+      // Reset state
+      this.state = {
+        provider: null,
+        rawProvider: null,
+        walletType: null,
+        wcProvider: null,
+      };
+
+      // Clear store
+      useWalletStore.getState().disconnect();
+      
+      toast.success('Wallet disconnected');
+    } catch (error) {
+      console.error('Disconnect error:', error);
+      // Force clear anyway
+      useWalletStore.getState().disconnect();
+    }
   }
 
+  /**
+   * Get wallet balance
+   */
   async getBalance(address: string): Promise<string> {
-    if (!this.provider) {
-      const ethereumProvider = this.getProvider(this.currentWalletType || 'injected');
-      if (ethereumProvider) {
-        this.provider = new BrowserProvider(ethereumProvider);
-      }
-    }
-
-    if (!this.provider) {
-      return '0';
-    }
-
     try {
-      const balance = await this.provider.getBalance(address);
+      if (!this.state.provider) {
+        return '0';
+      }
+      const balance = await this.state.provider.getBalance(address);
       return formatEther(balance);
     } catch (error) {
       console.error('Error getting balance:', error);
@@ -175,20 +285,24 @@ class Web3Service {
     }
   }
 
+  /**
+   * Switch to the correct network
+   */
   async switchNetwork(): Promise<boolean> {
-    const ethereumProvider = this.getProvider(this.currentWalletType || 'injected');
-    if (!ethereumProvider) return false;
+    const provider = this.state.rawProvider;
+    if (!provider) return false;
 
     try {
-      await ethereumProvider.request({
+      await provider.request({
         method: 'wallet_switchEthereumChain',
         params: [{ chainId: CHAIN_CONFIG.chainId }],
       });
       return true;
-    } catch (switchError: any) {
-      if (switchError.code === 4902) {
+    } catch (error: any) {
+      if (error.code === 4902) {
+        // Chain not added, try to add it
         try {
-          await ethereumProvider.request({
+          await provider.request({
             method: 'wallet_addEthereumChain',
             params: [CHAIN_CONFIG],
           });
@@ -199,25 +313,37 @@ class Web3Service {
           return false;
         }
       }
-      console.error('Error switching network:', switchError);
-      toast.error('Failed to switch network');
+      console.error('Error switching network:', error);
       return false;
     }
   }
 
+  /**
+   * Get signer for transactions
+   */
+  async getSigner(): Promise<JsonRpcSigner | null> {
+    if (!this.state.provider) {
+      throw new Error('Wallet not connected');
+    }
+    return this.state.provider.getSigner();
+  }
+
+  /**
+   * Estimate gas for a transaction
+   */
   async estimateGas(to: string, value: string): Promise<string> {
-    if (!this.provider) {
-      throw new Error('Provider not initialized');
+    if (!this.state.provider) {
+      throw new Error('Wallet not connected');
     }
 
     try {
-      const signer = await this.provider.getSigner();
+      const signer = await this.state.provider.getSigner();
       const gasEstimate = await signer.estimateGas({
         to,
         value: parseEther(value),
       });
 
-      const feeData = await this.provider.getFeeData();
+      const feeData = await this.state.provider.getFeeData();
       const gasPrice = feeData.gasPrice || BigInt(0);
       const gasCost = gasEstimate * gasPrice;
 
@@ -228,27 +354,33 @@ class Web3Service {
     }
   }
 
+  /**
+   * Send a transaction
+   */
   async sendTransaction(to: string, value: string): Promise<string> {
-    if (!this.provider) {
-      throw new Error('Provider not initialized');
+    if (!this.state.provider) {
+      throw new Error('Wallet not connected');
     }
 
     try {
-      const signer = await this.provider.getSigner();
+      const signer = await this.state.provider.getSigner();
       const tx = await signer.sendTransaction({
         to,
         value: parseEther(value),
       });
 
       toast.success('Transaction submitted');
-      await tx.wait();
-      toast.success('Transaction confirmed');
+      
+      const receipt = await tx.wait();
+      if (receipt?.status === 1) {
+        toast.success('Transaction confirmed');
+      }
 
       return tx.hash;
     } catch (error: any) {
-      console.error('Error sending transaction:', error);
+      console.error('Transaction error:', error);
       
-      if (error.code === 4001) {
+      if (error.code === 4001 || error.code === 'ACTION_REJECTED') {
         toast.error('Transaction rejected');
       } else {
         toast.error(error.message || 'Transaction failed');
@@ -257,64 +389,72 @@ class Web3Service {
     }
   }
 
-  private setupListeners(ethereumProvider: any): void {
-    if (!ethereumProvider) return;
-
-    // Remove any existing listeners first to prevent duplicates
-    this.removeListeners();
-
-    ethereumProvider.on('accountsChanged', this.handleAccountsChanged.bind(this));
-    ethereumProvider.on('chainChanged', this.handleChainChanged.bind(this));
-    ethereumProvider.on('disconnect', this.handleDisconnect.bind(this));
-  }
-
-  private removeListeners(): void {
-    const ethereumProvider = this.getProvider(this.currentWalletType || 'injected');
-    if (!ethereumProvider) return;
+  /**
+   * Sign a message
+   */
+  async signMessage(message: string): Promise<string> {
+    if (!this.state.provider) {
+      throw new Error('Wallet not connected');
+    }
 
     try {
-      ethereumProvider.removeListener('accountsChanged', this.handleAccountsChanged);
-      ethereumProvider.removeListener('chainChanged', this.handleChainChanged);
-      ethereumProvider.removeListener('disconnect', this.handleDisconnect);
-    } catch (error) {
-      // Ignore errors when removing listeners
+      const signer = await this.state.provider.getSigner();
+      return await signer.signMessage(message);
+    } catch (error: any) {
+      if (error.code === 4001) {
+        toast.error('Signature rejected');
+      }
+      throw error;
     }
   }
 
-  private async handleAccountsChanged(accounts: string[]): Promise<void> {
-    if (accounts.length === 0) {
-      this.disconnectWallet();
-    } else {
-      const address = accounts[0];
-      const balance = await this.getBalance(address);
-      useWalletStore.getState().setAddress(address);
-      useWalletStore.getState().setBalance(balance);
-      toast('Account changed');
-    }
-  }
-
-  private handleChainChanged(_chainId: string): void {
-    // Reload the page to reset the state
-    window.location.reload();
-  }
-
-  private handleDisconnect(): void {
-    this.disconnectWallet();
-  }
-
+  /**
+   * Check for existing connection on page load
+   */
   async checkConnection(): Promise<void> {
-    const ethereumProvider = this.getProvider('injected');
-    if (!ethereumProvider) return;
+    // Check for WalletConnect session
+    try {
+      const wcSessionKey = Object.keys(localStorage).find(key => 
+        key.startsWith('wc@2:')
+      );
+      
+      if (wcSessionKey) {
+        // Attempt to restore WalletConnect session
+        const wcProvider = await this.initWalletConnect();
+        if (wcProvider.session) {
+          await this.restoreWalletConnect(wcProvider);
+          return;
+        }
+      }
+    } catch (error) {
+      console.log('No WalletConnect session to restore');
+    }
+
+    // Check for injected provider using our safe detection
+    const injectedProvider = this.getInjectedProvider('injected');
+    if (!injectedProvider) return;
 
     try {
-      const provider = new BrowserProvider(ethereumProvider);
-      this.provider = provider;
-
-      const accounts = await ethereumProvider.request({
+      const accounts = await injectedProvider.request({
         method: 'eth_accounts',
       });
 
       if (accounts.length > 0) {
+        const provider = new BrowserProvider(injectedProvider);
+        this.state.provider = provider;
+        this.state.rawProvider = injectedProvider;
+
+        // Detect wallet type
+        if (injectedProvider.isMetaMask) {
+          this.state.walletType = 'metamask';
+        } else if (injectedProvider.isCoinbaseWallet) {
+          this.state.walletType = 'coinbase';
+        } else if (injectedProvider.isTrust) {
+          this.state.walletType = 'trust';
+        } else {
+          this.state.walletType = 'injected';
+        }
+
         const address = accounts[0];
         const network = await provider.getNetwork();
         const chainId = Number(network.chainId);
@@ -325,29 +465,119 @@ class Web3Service {
         useWalletStore.getState().setBalance(balance);
         useWalletStore.getState().setConnected(true);
 
-        // Detect which wallet is connected
-        if (ethereumProvider.isMetaMask) {
-          this.currentWalletType = 'metamask';
-        } else if (ethereumProvider.isCoinbaseWallet) {
-          this.currentWalletType = 'coinbase';
-        } else if (ethereumProvider.isTrust) {
-          this.currentWalletType = 'trust';
-        } else {
-          this.currentWalletType = 'injected';
-        }
-
-        this.setupListeners(ethereumProvider);
+        this.setupInjectedListeners(injectedProvider);
       }
     } catch (error) {
-      console.error('Error checking connection:', error);
+      // Silently handle errors from problematic extensions
+      console.log('Could not check existing connection:', error);
     }
   }
+
+  /**
+   * Restore WalletConnect session
+   */
+  private async restoreWalletConnect(wcProvider: EthereumProviderType): Promise<void> {
+    try {
+      const accounts = wcProvider.accounts;
+      if (accounts.length === 0) return;
+
+      const provider = new BrowserProvider(wcProvider);
+      this.state.provider = provider;
+      this.state.rawProvider = wcProvider;
+      this.state.wcProvider = wcProvider;
+      this.state.walletType = 'walletconnect';
+
+      const address = accounts[0];
+      const network = await provider.getNetwork();
+      const chainId = Number(network.chainId);
+      const balance = await this.getBalance(address);
+
+      useWalletStore.getState().setAddress(address);
+      useWalletStore.getState().setChainId(chainId);
+      useWalletStore.getState().setBalance(balance);
+      useWalletStore.getState().setConnected(true);
+
+      this.setupWalletConnectListeners(wcProvider);
+    } catch (error) {
+      console.error('Error restoring WalletConnect:', error);
+    }
+  }
+
+  /**
+   * Setup listeners for injected providers
+   */
+  private setupInjectedListeners(provider: any): void {
+    provider.on('accountsChanged', this.handleAccountsChanged);
+    provider.on('chainChanged', this.handleChainChanged);
+    provider.on('disconnect', this.handleDisconnect);
+  }
+
+  /**
+   * Setup listeners for WalletConnect
+   */
+  private setupWalletConnectListeners(wcProvider: EthereumProviderType): void {
+    wcProvider.on('accountsChanged', this.handleAccountsChanged);
+    wcProvider.on('chainChanged', this.handleChainChanged);
+    wcProvider.on('disconnect', this.handleDisconnect);
+    wcProvider.on('session_delete', this.handleDisconnect);
+  }
+
+  /**
+   * Remove all event listeners
+   */
+  private removeAllListeners(): void {
+    if (this.state.rawProvider) {
+      try {
+        this.state.rawProvider.removeListener('accountsChanged', this.handleAccountsChanged);
+        this.state.rawProvider.removeListener('chainChanged', this.handleChainChanged);
+        this.state.rawProvider.removeListener('disconnect', this.handleDisconnect);
+      } catch (e) {
+        // Ignore
+      }
+    }
+  }
+
+  /**
+   * Handle accounts changed event
+   */
+  private handleAccountsChanged = async (accounts: string[]): Promise<void> => {
+    if (!accounts || accounts.length === 0) {
+      await this.disconnectWallet();
+    } else {
+      const address = accounts[0];
+      const balance = await this.getBalance(address);
+      useWalletStore.getState().setAddress(address);
+      useWalletStore.getState().setBalance(balance);
+      toast('Account changed');
+    }
+  };
+
+  /**
+   * Handle chain changed event
+   */
+  private handleChainChanged = (): void => {
+    window.location.reload();
+  };
+
+  /**
+   * Handle disconnect event
+   */
+  private handleDisconnect = (): void => {
+    this.disconnectWallet();
+  };
 
   /**
    * Get current wallet type
    */
   getWalletType(): WalletType | null {
-    return this.currentWalletType;
+    return this.state.walletType;
+  }
+
+  /**
+   * Check if wallet is connected
+   */
+  isConnected(): boolean {
+    return !!this.state.provider && !!useWalletStore.getState().address;
   }
 }
 

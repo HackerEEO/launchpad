@@ -45,31 +45,37 @@ export const Modal = ({
   return (
     <AnimatePresence>
       {isOpen && (
-        <>
+        <div className="fixed inset-0 z-[100] overflow-y-auto">
+          {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/70 backdrop-blur-sm z-40"
+            className="fixed inset-0 bg-black/80 backdrop-blur-md"
             onClick={onClose}
           />
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          
+          {/* Modal Container - ensures proper centering */}
+          <div className="min-h-full flex items-center justify-center p-4">
             <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className={`glass-card w-full ${maxWidth} max-h-[90vh] overflow-y-auto`}
+              initial={{ scale: 0.95, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className={`relative w-full ${maxWidth} bg-background-secondary border border-white/10 rounded-2xl shadow-2xl shadow-black/50`}
+              onClick={(e) => e.stopPropagation()}
             >
+              {/* Header */}
               {title && (
-                <div className="flex items-center justify-between mb-6 pb-4 border-b border-white/10">
-                  <h2 className="text-2xl font-bold">{title}</h2>
+                <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
+                  <h2 className="text-xl font-bold text-white">{title}</h2>
                   <button
                     onClick={onClose}
-                    className="text-text-secondary hover:text-white transition-colors"
+                    className="p-2 rounded-lg text-text-secondary hover:text-white hover:bg-white/10 transition-all"
                   >
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
-                      className="h-6 w-6"
+                      className="h-5 w-5"
                       fill="none"
                       viewBox="0 0 24 24"
                       stroke="currentColor"
@@ -84,10 +90,14 @@ export const Modal = ({
                   </button>
                 </div>
               )}
-              {children}
+              
+              {/* Content */}
+              <div className="px-6 py-5 max-h-[calc(90vh-80px)] overflow-y-auto">
+                {children}
+              </div>
             </motion.div>
           </div>
-        </>
+        </div>
       )}
     </AnimatePresence>
   );
