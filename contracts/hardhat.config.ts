@@ -1,0 +1,87 @@
+import { HardhatUserConfig } from "hardhat/config";
+import "@nomicfoundation/hardhat-toolbox";
+import "@nomicfoundation/hardhat-verify";
+import "dotenv/config";
+
+const PRIVATE_KEY = process.env.DEPLOYER_PRIVATE_KEY || "0x0000000000000000000000000000000000000000000000000000000000000001";
+const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || "";
+const ARBISCAN_API_KEY = process.env.ARBISCAN_API_KEY || "";
+const BASESCAN_API_KEY = process.env.BASESCAN_API_KEY || "";
+
+const config: HardhatUserConfig = {
+  solidity: {
+    version: "0.8.20",
+    settings: {
+      optimizer: {
+        enabled: true,
+        runs: 200,
+      },
+      viaIR: true,
+      outputSelection: {
+        "*": {
+          "*": ["storageLayout"],
+        },
+      },
+    },
+  },
+  networks: {
+    hardhat: {
+      chainId: 31337,
+    },
+    localhost: {
+      url: "http://127.0.0.1:8545",
+      chainId: 31337,
+    },
+    sepolia: {
+      url: process.env.SEPOLIA_RPC_URL || "https://sepolia.infura.io/v3/YOUR_KEY",
+      chainId: 11155111,
+      accounts: [PRIVATE_KEY],
+    },
+    arbitrum: {
+      url: process.env.ARBITRUM_RPC_URL || "https://arb1.arbitrum.io/rpc",
+      chainId: 42161,
+      accounts: [PRIVATE_KEY],
+    },
+    base: {
+      url: process.env.BASE_RPC_URL || "https://mainnet.base.org",
+      chainId: 8453,
+      accounts: [PRIVATE_KEY],
+    },
+    mainnet: {
+      url: process.env.MAINNET_RPC_URL || "https://eth-mainnet.g.alchemy.com/v2/YOUR_KEY",
+      chainId: 1,
+      accounts: [PRIVATE_KEY],
+    },
+  },
+  etherscan: {
+    apiKey: {
+      mainnet: ETHERSCAN_API_KEY,
+      sepolia: ETHERSCAN_API_KEY,
+      arbitrumOne: ARBISCAN_API_KEY,
+      base: BASESCAN_API_KEY,
+    },
+  },
+  gasReporter: {
+    enabled: process.env.REPORT_GAS === "true",
+    currency: "USD",
+    coinmarketcap: process.env.COINMARKETCAP_API_KEY,
+    outputFile: process.env.CI ? "gas-report.txt" : undefined,
+    noColors: process.env.CI ? true : false,
+    excludeContracts: ["mocks/"],
+  },
+  mocha: {
+    timeout: 120000, // 2 minutes for complex tests
+  },
+  paths: {
+    sources: "./src",
+    tests: "./test",
+    cache: "./cache",
+    artifacts: "./artifacts",
+  },
+  typechain: {
+    outDir: "./typechain-types",
+    target: "ethers-v6",
+  },
+};
+
+export default config;
