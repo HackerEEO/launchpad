@@ -8,6 +8,88 @@ This guide will help you deploy your CryptoLaunch platform to production.
 - Supabase account
 - Git repository (GitHub, GitLab, etc.)
 - Vercel or Netlify account (recommended)
+- RPC provider account (Alchemy, Infura, or QuickNode)
+- WalletConnect project ID
+
+## Step 1: Network Configuration
+
+### 1.1 Choose Your Network
+
+CryptoLaunch supports multiple EVM networks. Choose based on your needs:
+
+| Network | Chain ID | Gas Fees | Best For |
+|---------|----------|----------|----------|
+| **Arbitrum One** | 42161 | Very Low | Production (recommended) |
+| **Base** | 8453 | Very Low | Production (recommended) |
+| **Optimism** | 10 | Low | Production |
+| **Polygon** | 137 | Low | Production |
+| **Ethereum** | 1 | High | High-value launches |
+| **Sepolia** | 11155111 | Free | Development/Testing |
+
+### 1.2 Get RPC URLs
+
+You'll need RPC URLs from a provider. Choose one:
+
+#### Alchemy (Recommended)
+1. Sign up at [alchemy.com](https://www.alchemy.com/)
+2. Create a new app for your target network
+3. Copy the HTTPS URL
+4. Example: `https://arb-mainnet.g.alchemy.com/v2/YOUR_API_KEY`
+
+#### Infura
+1. Sign up at [infura.io](https://infura.io/)
+2. Create a new project
+3. Copy the endpoint URL
+4. Example: `https://arbitrum-mainnet.infura.io/v3/YOUR_PROJECT_ID`
+
+#### QuickNode
+1. Sign up at [quicknode.com](https://www.quicknode.com/)
+2. Create an endpoint for your network
+3. Copy the HTTP URL
+
+### 1.3 Get WalletConnect Project ID
+
+1. Go to [cloud.walletconnect.com](https://cloud.walletconnect.com/)
+2. Sign up / Sign in
+3. Create a new project
+4. Copy the Project ID
+
+### 1.4 Configure Environment Variables
+
+Copy `.env.example` to `.env` and update:
+
+```bash
+# Network Selection
+VITE_CHAIN_ID=42161                    # Arbitrum One
+VITE_CHAIN_NAME=Arbitrum One
+VITE_RPC_URL=https://arb-mainnet.g.alchemy.com/v2/YOUR_KEY
+VITE_EXPLORER_BASE_URL=https://arbiscan.io
+
+# WalletConnect
+VITE_WALLETCONNECT_PROJECT_ID=your_project_id
+```
+
+### 1.5 Deploy Smart Contracts
+
+Before launching, deploy your contracts to the target network:
+
+```bash
+cd contracts
+npm install
+
+# Deploy to Arbitrum (example)
+npx hardhat run scripts/deploy.ts --network arbitrum
+
+# Copy the deployed addresses to your .env file
+```
+
+Update your `.env` with the deployed contract addresses:
+
+```bash
+VITE_LAUNCHPAD_FACTORY_ARBITRUM=0x...
+VITE_VESTING_CONTRACT_ARBITRUM=0x...
+VITE_WHITELIST_ARBITRUM=0x...
+```
 
 ## Step 1: Prepare Your Database
 

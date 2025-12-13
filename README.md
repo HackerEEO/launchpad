@@ -55,15 +55,30 @@ A production-ready, full-stack crypto token launchpad platform where blockchain 
   - Authentication
 
 ### Blockchain
-- **Ethereum Sepolia Testnet** - Test network for development
-- **MetaMask** - Browser wallet integration
-- **Smart Contract Simulation** - Transaction simulation with Supabase
+- **Multi-Chain Support** - Arbitrum, Base, Polygon, Optimism, Ethereum, Sepolia
+- **MetaMask & WalletConnect** - Browser wallet integration
+- **Ethers.js v6** - Modern Ethereum library
+- **Smart Contract Integration** - IDO pools, token vesting, whitelists
 
 ## 📋 Prerequisites
 
 - Node.js 18+ and npm/yarn/pnpm
 - MetaMask or compatible Web3 wallet
 - Supabase account (free tier works)
+- RPC provider account (Alchemy, Infura, or QuickNode)
+
+## 🌐 Supported Networks
+
+| Network | Chain ID | Type | Explorer |
+|---------|----------|------|----------|
+| Arbitrum One | 42161 | Mainnet | [arbiscan.io](https://arbiscan.io) |
+| Base | 8453 | Mainnet | [basescan.org](https://basescan.org) |
+| Optimism | 10 | Mainnet | [optimistic.etherscan.io](https://optimistic.etherscan.io) |
+| Polygon | 137 | Mainnet | [polygonscan.com](https://polygonscan.com) |
+| Ethereum | 1 | Mainnet | [etherscan.io](https://etherscan.io) |
+| Sepolia | 11155111 | Testnet | [sepolia.etherscan.io](https://sepolia.etherscan.io) |
+
+**Recommended for production:** Arbitrum One or Base (lowest gas fees)
 
 ## 🚀 Quick Start
 
@@ -82,12 +97,28 @@ npm install
 
 ### 3. Environment Setup
 
-The `.env` file is already configured with Supabase credentials. If you need to change them:
+Copy `.env.example` to `.env` and configure:
 
-```env
-VITE_SUPABASE_URL=your_supabase_url
-VITE_SUPABASE_SUPABASE_ANON_KEY=your_supabase_anon_key
+```bash
+cp .env.example .env
 ```
+
+**Required variables:**
+```env
+# Supabase
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_SUPABASE_ANON_KEY=your_anon_key
+
+# Network (default: Arbitrum One)
+VITE_CHAIN_ID=42161
+VITE_RPC_URL=https://arb-mainnet.g.alchemy.com/v2/YOUR_KEY
+VITE_EXPLORER_BASE_URL=https://arbiscan.io
+
+# WalletConnect
+VITE_WALLETCONNECT_PROJECT_ID=your_project_id
+```
+
+See [`.env.example`](.env.example) for all options and [DEPLOYMENT.md](DEPLOYMENT.md) for detailed setup.
 
 ### 4. Database Setup
 

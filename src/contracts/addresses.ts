@@ -48,31 +48,41 @@ export const POLYGON_ADDRESSES: ContractAddresses = {
   LAUNCHPAD_FACTORY: env.VITE_LAUNCHPAD_FACTORY_POLYGON || "",
 };
 
+// Optimism (Chain ID: 10)
+export const OPTIMISM_ADDRESSES: ContractAddresses = {
+  WHITELIST: env.VITE_WHITELIST_OPTIMISM || "",
+  TOKEN_VESTING: env.VITE_VESTING_CONTRACT_OPTIMISM || "",
+  LAUNCHPAD_FACTORY: env.VITE_LAUNCHPAD_FACTORY_OPTIMISM || "",
+};
+
 // Map chain IDs to addresses
 export const CONTRACT_ADDRESSES: Record<number, ContractAddresses> = {
   1: MAINNET_ADDRESSES,
-  11155111: SEPOLIA_ADDRESSES,
-  42161: ARBITRUM_ADDRESSES,
-  8453: BASE_ADDRESSES,
+  10: OPTIMISM_ADDRESSES,
   137: POLYGON_ADDRESSES,
+  8453: BASE_ADDRESSES,
+  42161: ARBITRUM_ADDRESSES,
+  11155111: SEPOLIA_ADDRESSES,
 };
 
 // Block explorer URLs by chain ID
 export const EXPLORER_URLS: Record<number, string> = {
   1: 'https://etherscan.io',
-  11155111: 'https://sepolia.etherscan.io',
-  42161: 'https://arbiscan.io',
-  8453: 'https://basescan.org',
+  10: 'https://optimistic.etherscan.io',
   137: 'https://polygonscan.com',
+  8453: 'https://basescan.org',
+  42161: 'https://arbiscan.io',
+  11155111: 'https://sepolia.etherscan.io',
 };
 
-// RPC URLs by chain ID (fallbacks)
+// RPC URLs by chain ID (fallbacks - prefer env vars)
 export const RPC_URLS: Record<number, string> = {
   1: env.VITE_RPC_URL_MAINNET || 'https://eth.llamarpc.com',
-  11155111: env.VITE_RPC_URL_SEPOLIA || 'https://sepolia.infura.io/v3/',
-  42161: env.VITE_RPC_URL_ARBITRUM || 'https://arb1.arbitrum.io/rpc',
-  8453: env.VITE_RPC_URL_BASE || 'https://mainnet.base.org',
+  10: env.VITE_RPC_URL_OPTIMISM || 'https://mainnet.optimism.io',
   137: env.VITE_RPC_URL_POLYGON || 'https://polygon-rpc.com',
+  8453: env.VITE_RPC_URL_BASE || 'https://mainnet.base.org',
+  42161: env.VITE_RPC_URL_ARBITRUM || 'https://arb1.arbitrum.io/rpc',
+  11155111: env.VITE_RPC_URL_SEPOLIA || 'https://rpc.sepolia.org',
 };
 
 /**
