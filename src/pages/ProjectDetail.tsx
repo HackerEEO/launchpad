@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useProject } from '@/hooks/useProjects';
 import { useWallet } from '@/hooks/useWallet';
+import { useIDOPool } from '@/contracts/hooks';
 import { investmentsService } from '@/services/investments.service';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -12,17 +13,25 @@ import { CountdownTimer } from '@/components/ui/CountdownTimer';
 import { Tabs } from '@/components/ui/Tabs';
 import { Modal } from '@/components/ui/Modal';
 import { Loading } from '@/components/ui/Loading';
+import { TransactionModal, TransactionStatus } from '@/components/ui/TransactionModal';
 import { calculateProgress, formatCurrency, formatNumber } from '@/utils/helpers';
+import { getExplorerTxUrl, DEFAULT_CHAIN_ID } from '@/contracts/addresses';
 import toast from 'react-hot-toast';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 
 export const ProjectDetail = () => {
   const { id } = useParams<{ id: string }>();
   const { project, loading } = useProject(id);
-  const { address, isConnected, connect } = useWallet();
+  const { address, isConnected, connect, chainId } = useWallet();
+  const { invest: investOnChain } = useIDOPool();
+  
   const [investmentAmount, setInvestmentAmount] = useState('');
   const [isInvesting, setIsInvesting] = useState(false);
   const [showInvestModal, setShowInvestModal] = useState(false);
+  const [showTxModal, setShowTxModal] = useState(false);
+  const [txStatus, setTxStatus] = useState<TransactionStatus>('idle');
+  const [txHash, setTxHash] = useState<string | undefined>();
+  const [txError, setTxError] = useState<string | undefined>();
 
   if (loading) {
     return <Loading fullScreen />;
@@ -67,28 +76,83 @@ export const ProjectDetail = () => {
       return;
     }
 
-    setIsInvesting(true);
-    try {
-      const amount = Number(investmentAmount);
-      const tokensPurchased = amount / project.token_price;
-
-      await investmentsService.create({
-        user_wallet: address!,
-        project_id: project.id,
-        amount_invested: amount,
-        tokens_purchased: tokensPurchased,
-        transaction_hash: `0x${Math.random().toString(16).substr(2, 64)}`,
-      });
-
-      toast.success('Investment successful!');
+    // Check if project has a contract address for on-chain investment
+    const poolAddress = project.contract_address;
+    
+    if (poolAddress) {
+      // On-chain investment flow
       setShowInvestModal(false);
-      setInvestmentAmount('');
-    } catch (error: any) {
-      toast.error(error.message || 'Investment failed');
-    } finally {
-      setIsInvesting(false);
+      setShowTxModal(true);
+      setTxStatus('pending');
+      setTxHash(undefined);
+      setTxError(undefined);
+
+      try {
+        const txHashResult = await investOnChain(poolAddress, investmentAmount);
+        
+        if (txHashResult) {
+          setTxHash(txHashResult);
+          setTxStatus('success');
+          
+          // Record in database after on-chain success
+          const amount = Number(investmentAmount);
+          const tokensPurchased = amount / project.token_price;
+          
+          await investmentsService.create({
+            user_wallet: address!,
+            project_id: project.id,
+            amount_invested: amount,
+            tokens_purchased: tokensPurchased,
+            transaction_hash: txHashResult,
+          });
+          
+          setInvestmentAmount('');
+        } else {
+          setTxStatus('error');
+          setTxError('Transaction failed or was rejected');
+        }
+      } catch (error: any) {
+        setTxStatus('error');
+        setTxError(error.message || 'Investment failed');
+      }
+    } else {
+      // Fallback: Database-only flow (for projects without smart contracts)
+      setIsInvesting(true);
+      try {
+        const amount = Number(investmentAmount);
+        const tokensPurchased = amount / project.token_price;
+
+        // Generate a placeholder hash for testnet/demo purposes
+        const placeholderHash = `0x${Date.now().toString(16)}${'0'.repeat(48)}`;
+        
+        await investmentsService.create({
+          user_wallet: address!,
+          project_id: project.id,
+          amount_invested: amount,
+          tokens_purchased: tokensPurchased,
+          transaction_hash: placeholderHash,
+        });
+
+        toast.success('Investment recorded successfully!');
+        setShowInvestModal(false);
+        setInvestmentAmount('');
+      } catch (error: any) {
+        toast.error(error.message || 'Investment failed');
+      } finally {
+        setIsInvesting(false);
+      }
     }
   };
+
+  const handleRetryInvest = () => {
+    setTxStatus('idle');
+    setTxError(undefined);
+    setShowTxModal(false);
+    setShowInvestModal(true);
+  };
+
+  const currentChainId = chainId || DEFAULT_CHAIN_ID;
+  const explorerUrl = txHash ? getExplorerTxUrl(currentChainId, txHash) : undefined;
 
   const tabs = [
     {
@@ -359,6 +423,20 @@ export const ProjectDetail = () => {
           </Button>
         </div>
       </Modal>
+
+      {/* Transaction Status Modal */}
+      <TransactionModal
+        isOpen={showTxModal}
+        onClose={() => setShowTxModal(false)}
+        status={txStatus}
+        title="Investment Transaction"
+        txHash={txHash}
+        explorerUrl={explorerUrl}
+        errorMessage={txError}
+        onRetry={handleRetryInvest}
+        amount={investmentAmount}
+        tokenSymbol="ETH"
+      />
     </div>
   );
 };

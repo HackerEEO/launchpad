@@ -94,15 +94,30 @@ A production-ready, full-stack crypto token launchpad platform where blockchain 
   - Authentication
 
 ### Blockchain
-- **Ethereum Sepolia Testnet** - Test network for development
-- **MetaMask** - Browser wallet integration
-- **Smart Contract Simulation** - Transaction simulation with Supabase
+- **Multi-Chain Support** - Arbitrum, Base, Polygon, Optimism, Ethereum, Sepolia
+- **MetaMask & WalletConnect** - Browser wallet integration
+- **Ethers.js v6** - Modern Ethereum library
+- **Smart Contract Integration** - IDO pools, token vesting, whitelists
 
 ## 📋 Prerequisites
 
 - Node.js 18+ and npm/yarn/pnpm
 - MetaMask or compatible Web3 wallet
 - Supabase account (free tier works)
+- RPC provider account (Alchemy, Infura, or QuickNode)
+
+## 🌐 Supported Networks
+
+| Network | Chain ID | Type | Explorer |
+|---------|----------|------|----------|
+| Arbitrum One | 42161 | Mainnet | [arbiscan.io](https://arbiscan.io) |
+| Base | 8453 | Mainnet | [basescan.org](https://basescan.org) |
+| Optimism | 10 | Mainnet | [optimistic.etherscan.io](https://optimistic.etherscan.io) |
+| Polygon | 137 | Mainnet | [polygonscan.com](https://polygonscan.com) |
+| Ethereum | 1 | Mainnet | [etherscan.io](https://etherscan.io) |
+| Sepolia | 11155111 | Testnet | [sepolia.etherscan.io](https://sepolia.etherscan.io) |
+
+**Recommended for production:** Arbitrum One or Base (lowest gas fees)
 
 ## 🚀 Quick Start
 
@@ -121,12 +136,28 @@ npm install
 
 ### 3. Environment Setup
 
-The `.env` file is already configured with Supabase credentials. If you need to change them:
+Copy `.env.example` to `.env` and configure:
 
-```env
-VITE_SUPABASE_URL=your_supabase_url
-VITE_SUPABASE_SUPABASE_ANON_KEY=your_supabase_anon_key
+```bash
+cp .env.example .env
 ```
+
+**Required variables:**
+```env
+# Supabase
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_SUPABASE_ANON_KEY=your_anon_key
+
+# Network (default: Arbitrum One)
+VITE_CHAIN_ID=42161
+VITE_RPC_URL=https://arb-mainnet.g.alchemy.com/v2/YOUR_KEY
+VITE_EXPLORER_BASE_URL=https://arbiscan.io
+
+# WalletConnect
+VITE_WALLETCONNECT_PROJECT_ID=your_project_id
+```
+
+See [`.env.example`](.env.example) for all options and [DEPLOYMENT.md](DEPLOYMENT.md) for detailed setup.
 
 ### 4. Database Setup
 
@@ -266,18 +297,118 @@ crypto-launchpad/
 
 ## 🔄 Web3 Integration
 
+### Smart Contracts
+
+The platform includes production-ready smart contracts in `contracts/`:
+
+- **IDOPool.sol**: Main investment pool contract
+- **TokenVesting.sol**: Token vesting with cliff and linear release
+- **Whitelist.sol**: Merkle proof whitelist verification
+- **LaunchpadFactory.sol**: Factory for deploying new IDO pools
+- **MockERC20.sol**: Test token for development
+
+### Contract Hooks
+
+Custom React hooks for contract interactions (`src/contracts/hooks/`):
+
+```typescript
+// Investment hook
+const { poolInfo, invest, claim, refund } = useIDOPool(poolAddress);
+
+// Vesting hook  
+const { vestingSchedule, release, releasableAmount } = useTokenVesting(vestingAddress);
+
+// Token balance hook
+const { balance, allowance, approve } = useTokenBalance(tokenAddress, userAddress);
+```
+
 ### Wallet Connection
 - MetaMask support out of the box
-- Easy to add WalletConnect
+- WalletConnect integration
 - Network switching to Sepolia testnet
 - Balance display and transaction handling
 
 ### Transaction Flow
 1. User connects wallet
 2. Selects investment amount
-3. Reviews transaction details
-4. Confirms transaction
-5. Investment recorded in database
+3. Gas estimation is displayed
+4. User reviews and confirms transaction
+5. Transaction modal shows pending state
+6. On-chain transaction is verified by Supabase Edge Function
+7. Investment recorded in database with verified on-chain data
+
+### Supported Networks
+- Ethereum Mainnet (Chain ID: 1)
+- Sepolia Testnet (Chain ID: 11155111)
+- Arbitrum One (Chain ID: 42161)
+- Base (Chain ID: 8453)
+- Polygon (Chain ID: 137)
+
+## 🧪 Testing
+
+### Running Tests
+
+```bash
+# Run all tests
+npm test
+
+# Run tests in watch mode
+npm test -- --watch
+
+# Run tests with UI
+npm run test:ui
+
+# Generate coverage report
+npm run test:coverage
+```
+
+### Test Files
+
+Tests are located in `src/contracts/hooks/__tests__/`:
+- `useIDOPool.test.ts` - IDO Pool hook tests
+- `useTokenVesting.test.ts` - Vesting hook tests
+- `useTokenBalance.test.ts` - Token balance hook tests
+
+### Demo Investment Script
+
+Test the investment flow on Sepolia:
+
+```bash
+# Set environment variables
+export PRIVATE_KEY=your_private_key
+export IDO_POOL_ADDRESS=deployed_pool_address
+export SEPOLIA_RPC_URL=https://rpc.sepolia.org
+
+# Run demo
+node scripts/demo-invest.js
+```
+
+### Contract Tests
+
+Run Hardhat tests for smart contracts:
+
+```bash
+cd contracts
+npm test
+
+# Run specific test
+npx hardhat test test/IDOPool.test.ts
+
+# Run with coverage
+npx hardhat coverage
+```
+
+### Security Tests (Foundry)
+
+Run fuzz tests:
+
+```bash
+cd contracts
+forge test -vvv
+
+# Run specific fuzz test
+forge test --match-contract IDOPoolFuzzTest -vvv
+```
 
 ## 🚀 Deployment
 
