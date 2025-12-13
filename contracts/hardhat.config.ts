@@ -17,6 +17,11 @@ const config: HardhatUserConfig = {
         runs: 200,
       },
       viaIR: true,
+      outputSelection: {
+        "*": {
+          "*": ["storageLayout"],
+        },
+      },
     },
   },
   networks: {
@@ -60,6 +65,12 @@ const config: HardhatUserConfig = {
     enabled: process.env.REPORT_GAS === "true",
     currency: "USD",
     coinmarketcap: process.env.COINMARKETCAP_API_KEY,
+    outputFile: process.env.CI ? "gas-report.txt" : undefined,
+    noColors: process.env.CI ? true : false,
+    excludeContracts: ["mocks/"],
+  },
+  mocha: {
+    timeout: 120000, // 2 minutes for complex tests
   },
   paths: {
     sources: "./src",
