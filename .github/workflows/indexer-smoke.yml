@@ -1,0 +1,239 @@
+name: Indexer Smoke Tests
+
+on:
+  schedule:
+    # Run every 6 hours
+    - cron: '0 */6 * * *'
+  pull_request:
+    paths:
+      - 'contracts/subgraph/**'
+      - 'supabase/functions/**'
+  workflow_dispatch:
+    inputs:
+      subgraph_url:
+        description: 'Subgraph URL to test (optional, uses secret if not provided)'
+        required: false
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  subgraph-health:
+    name: Subgraph Health Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    
+    steps:
+      - name: Check Subgraph Endpoint
+        run: |
+          SUBGRAPH_URL="${{ github.event.inputs.subgraph_url || secrets.SUBGRAPH_URL }}"
+          
+          if [ -z "$SUBGRAPH_URL" ]; then
+            echo "⚠️ SUBGRAPH_URL not configured, skipping health check"
+            exit 0
+          fi
+          
+          echo "🔍 Checking subgraph health at: $SUBGRAPH_URL"
+          
+          # Query subgraph meta for sync status
+          RESPONSE=$(curl -s -X POST "$SUBGRAPH_URL" \
+            -H "Content-Type: application/json" \
+            -d '{"query": "{ _meta { block { number } hasIndexingErrors } }"}' \
+            --max-time 30)
+          
+          echo "Response: $RESPONSE"
+          
+          # Check for errors
+          if echo "$RESPONSE" | grep -q '"errors"'; then
+            echo "❌ Subgraph returned errors"
+            exit 1
+          fi
+          
+          # Check for indexing errors
+          if echo "$RESPONSE" | grep -q '"hasIndexingErrors":true'; then
+            echo "❌ Subgraph has indexing errors"
+            exit 1
+          fi
+          
+          # Extract block number
+          BLOCK=$(echo "$RESPONSE" | grep -oP '"number":\s*"\K[^"]+' || echo "unknown")
+          echo "✅ Subgraph healthy, indexed to block: $BLOCK"
+
+      - name: Query Global Stats
+        if: success()
+        run: |
+          SUBGRAPH_URL="${{ github.event.inputs.subgraph_url || secrets.SUBGRAPH_URL }}"
+          
+          if [ -z "$SUBGRAPH_URL" ]; then
+            exit 0
+          fi
+          
+          echo "📊 Querying global stats..."
+          
+          RESPONSE=$(curl -s -X POST "$SUBGRAPH_URL" \
+            -H "Content-Type: application/json" \
+            -d '{"query": "{ globalStats(id: \"global\") { totalPools totalInvestments totalVolume } }"}' \
+            --max-time 30)
+          
+          echo "Response: $RESPONSE"
+          
+          if echo "$RESPONSE" | grep -q '"errors"'; then
+            echo "⚠️ Stats query returned errors (may be expected if no data)"
+          else
+            echo "✅ Stats query successful"
+          fi
+
+  edge-function-health:
+    name: Edge Function Availability
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    
+    steps:
+      - name: Check process-investment function
+        run: |
+          SUPABASE_URL="${{ secrets.VITE_SUPABASE_URL }}"
+          
+          if [ -z "$SUPABASE_URL" ]; then
+            echo "⚠️ SUPABASE_URL not configured, skipping edge function check"
+            exit 0
+          fi
+          
+          FUNCTION_URL="${SUPABASE_URL}/functions/v1/process-investment"
+          echo "🔍 Checking edge function at: $FUNCTION_URL"
+          
+          # Send OPTIONS request to check if function exists
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X OPTIONS "$FUNCTION_URL" \
+            --max-time 30)
+          
+          echo "HTTP Status: $HTTP_STATUS"
+          
+          if [ "$HTTP_STATUS" -eq 204 ] || [ "$HTTP_STATUS" -eq 200 ]; then
+            echo "✅ process-investment function is available"
+          elif [ "$HTTP_STATUS" -eq 401 ] || [ "$HTTP_STATUS" -eq 403 ]; then
+            echo "✅ process-investment function exists (auth required)"
+          else
+            echo "❌ process-investment function may not be deployed (status: $HTTP_STATUS)"
+            exit 1
+          fi
+
+      - name: Check claim-tokens function
+        run: |
+          SUPABASE_URL="${{ secrets.VITE_SUPABASE_URL }}"
+          
+          if [ -z "$SUPABASE_URL" ]; then
+            exit 0
+          fi
+          
+          FUNCTION_URL="${SUPABASE_URL}/functions/v1/claim-tokens"
+          echo "🔍 Checking edge function at: $FUNCTION_URL"
+          
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X OPTIONS "$FUNCTION_URL" \
+            --max-time 30)
+          
+          echo "HTTP Status: $HTTP_STATUS"
+          
+          if [ "$HTTP_STATUS" -eq 204 ] || [ "$HTTP_STATUS" -eq 200 ]; then
+            echo "✅ claim-tokens function is available"
+          elif [ "$HTTP_STATUS" -eq 401 ] || [ "$HTTP_STATUS" -eq 403 ]; then
+            echo "✅ claim-tokens function exists (auth required)"
+          else
+            echo "❌ claim-tokens function may not be deployed (status: $HTTP_STATUS)"
+            exit 1
+          fi
+
+  subgraph-build:
+    name: Subgraph Build Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: contracts/subgraph/package.json
+
+      - name: Install subgraph dependencies
+        working-directory: contracts/subgraph
+        run: npm ci
+
+      - name: Generate types
+        working-directory: contracts/subgraph
+        run: npm run codegen
+
+      - name: Build subgraph
+        working-directory: contracts/subgraph
+        run: npm run build
+
+      - name: Validate subgraph manifest
+        working-directory: contracts/subgraph
+        run: |
+          echo "📋 Validating subgraph.yaml..."
+          
+          # Check required fields exist
+          if ! grep -q "specVersion:" subgraph.yaml; then
+            echo "❌ Missing specVersion"
+            exit 1
+          fi
+          
+          if ! grep -q "dataSources:" subgraph.yaml; then
+            echo "❌ Missing dataSources"
+            exit 1
+          fi
+          
+          echo "✅ Subgraph manifest is valid"
+
+  notify-on-failure:
+    name: Notify on Failure
+    runs-on: ubuntu-latest
+    needs: [subgraph-health, edge-function-health, subgraph-build]
+    if: failure() && github.event_name == 'schedule'
+    
+    steps:
+      - name: Create Issue on Failure
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = '🚨 Indexer Smoke Test Failed';
+            const body = `
+            ## Indexer Health Check Failed
+            
+            **Workflow Run:** ${context.runId}
+            **Time:** ${new Date().toISOString()}
+            
+            One or more indexer smoke tests have failed. Please investigate:
+            
+            - [ ] Check subgraph sync status
+            - [ ] Verify edge functions are deployed
+            - [ ] Check RPC endpoint health
+            - [ ] Review recent deployments
+            
+            [View Workflow Run](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})
+            `;
+            
+            // Check if similar issue exists
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'indexer-alert'
+            });
+            
+            if (issues.data.length === 0) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: title,
+                body: body,
+                labels: ['indexer-alert', 'bug', 'high-priority']
+              });
+              console.log('Created new issue for indexer failure');
+            } else {
+              console.log('Issue already exists, skipping creation');
+            }
