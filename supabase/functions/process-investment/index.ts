@@ -13,22 +13,63 @@ const IDO_POOL_ABI = [
   'event Investment(address indexed investor, uint256 paymentAmount, uint256 tokenAmount)'
 ];
 
+// Configuration from environment
+const REQUIRED_CONFIRMATIONS = Number(Deno.env.get('INDEXER_CONFIRMATIONS') ?? '1');
+const SUBGRAPH_URL = Deno.env.get('SUBGRAPH_URL');
+
 // Network RPC URLs (configure in Supabase edge function secrets)
 const RPC_URLS: Record<number, string> = {
   1: Deno.env.get('MAINNET_RPC_URL') ?? 'https://eth.llamarpc.com',
-  11155111: Deno.env.get('SEPOLIA_RPC_URL') ?? 'https://rpc.sepolia.org',
-  42161: Deno.env.get('ARBITRUM_RPC_URL') ?? 'https://arb1.arbitrum.io/rpc',
-  8453: Deno.env.get('BASE_RPC_URL') ?? 'https://mainnet.base.org',
+  10: Deno.env.get('OPTIMISM_RPC_URL') ?? 'https://mainnet.optimism.io',
   137: Deno.env.get('POLYGON_RPC_URL') ?? 'https://polygon-rpc.com',
+  8453: Deno.env.get('BASE_RPC_URL') ?? 'https://mainnet.base.org',
+  42161: Deno.env.get('ARBITRUM_RPC_URL') ?? 'https://arb1.arbitrum.io/rpc',
+  11155111: Deno.env.get('SEPOLIA_RPC_URL') ?? 'https://rpc.sepolia.org',
 };
 
 interface TransactionVerificationResult {
   verified: boolean;
+  source: 'onchain' | 'subgraph' | 'both';
   investor?: string;
   paymentAmount?: string;
   tokenAmount?: string;
   poolAddress?: string;
+  blockNumber?: number;
+  confirmations?: number;
   error?: string;
+}
+
+/**
+ * Query subgraph for investment by transaction hash (optional cross-check)
+ */
+async function querySubgraphInvestment(txHash: string): Promise<any | null> {
+  if (!SUBGRAPH_URL) return null;
+  
+  try {
+    const query = `{
+      investments(where: { transactionHash: "${txHash.toLowerCase()}" }) {
+        id
+        investor
+        paymentAmount
+        tokenAmount
+        pool
+        blockNumber
+        timestamp
+      }
+    }`;
+    
+    const response = await fetch(SUBGRAPH_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query }),
+    });
+    
+    const data = await response.json();
+    return data?.data?.investments?.[0] || null;
+  } catch (error) {
+    console.error('Subgraph query failed:', error);
+    return null;
+  }
 }
 
 /**
@@ -42,7 +83,7 @@ async function verifyInvestmentTransaction(
 ): Promise<TransactionVerificationResult> {
   const rpcUrl = RPC_URLS[chainId];
   if (!rpcUrl) {
-    return { verified: false, error: `Unsupported chain ID: ${chainId}` };
+    return { verified: false, source: 'onchain', error: `Unsupported chain ID: ${chainId}` };
   }
 
   try {
@@ -51,12 +92,26 @@ async function verifyInvestmentTransaction(
     // Get transaction receipt
     const receipt = await provider.getTransactionReceipt(txHash);
     if (!receipt) {
-      return { verified: false, error: 'Transaction not found or not yet confirmed' };
+      return { verified: false, source: 'onchain', error: 'Transaction not found or not yet confirmed' };
     }
 
     // Check transaction was successful
     if (receipt.status !== 1) {
-      return { verified: false, error: 'Transaction failed on-chain' };
+      return { verified: false, source: 'onchain', error: 'Transaction failed on-chain' };
+    }
+
+    // Check block confirmations
+    const currentBlock = await provider.getBlockNumber();
+    const confirmations = currentBlock - receipt.blockNumber;
+    
+    if (confirmations < REQUIRED_CONFIRMATIONS) {
+      return { 
+        verified: false, 
+        source: 'onchain',
+        blockNumber: receipt.blockNumber,
+        confirmations,
+        error: `Insufficient confirmations: ${confirmations}/${REQUIRED_CONFIRMATIONS}` 
+      };
     }
 
     // Parse Investment event from logs
@@ -77,17 +132,38 @@ async function verifyInvestmentTransaction(
           // Verify the investor matches
           if (investor !== expectedInvestor.toLowerCase()) {
             return { 
-              verified: false, 
+              verified: false,
+              source: 'onchain',
               error: `Investor mismatch: expected ${expectedInvestor}, got ${investor}` 
             };
           }
 
+          // Optional: Cross-check with subgraph if available
+          let source: 'onchain' | 'subgraph' | 'both' = 'onchain';
+          const subgraphData = await querySubgraphInvestment(txHash);
+          
+          if (subgraphData) {
+            // Validate subgraph data matches on-chain data
+            if (
+              subgraphData.investor.toLowerCase() === investor &&
+              subgraphData.paymentAmount === paymentAmount &&
+              subgraphData.tokenAmount === tokenAmount
+            ) {
+              source = 'both';
+            } else {
+              console.warn('Subgraph data mismatch with on-chain data');
+            }
+          }
+
           return {
             verified: true,
+            source,
             investor,
             paymentAmount,
             tokenAmount,
-            poolAddress: log.address.toLowerCase()
+            poolAddress: log.address.toLowerCase(),
+            blockNumber: receipt.blockNumber,
+            confirmations,
           };
         }
       } catch {
@@ -96,9 +172,9 @@ async function verifyInvestmentTransaction(
       }
     }
 
-    return { verified: false, error: 'No Investment event found in transaction logs' };
+    return { verified: false, source: 'onchain', error: 'No Investment event found in transaction logs' };
   } catch (error) {
-    return { verified: false, error: `Verification failed: ${(error as Error).message}` };
+    return { verified: false, source: 'onchain', error: `Verification failed: ${(error as Error).message}` };
   }
 }
 
