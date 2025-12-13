@@ -36,7 +36,7 @@ export const Dashboard = () => {
   const navigate = useNavigate();
   const { address, isConnected, connect, balance, isConnecting, chainId } = useWallet();
   const { portfolio, loading: portfolioLoading } = usePortfolio(address);
-  const { investments, loading: investmentsLoading, refetch: refetchInvestments } = useInvestments(address);
+  const { investments, loading: investmentsLoading, refresh: refreshInvestments } = useInvestments(address);
   const { claim: claimFromPool } = useIDOPool();
   const { release: releaseVesting } = useVesting();
   
@@ -84,7 +84,7 @@ export const Dashboard = () => {
         setClaimStatus('success');
         toast.success('Tokens claimed successfully!');
         // Refresh investments list
-        refetchInvestments?.();
+        refreshInvestments?.();
       } else {
         setClaimStatus('error');
         setClaimError('Claim transaction failed or was rejected');
@@ -489,8 +489,8 @@ export const Dashboard = () => {
                               whileTap={{ scale: 0.95 }}
                               onClick={() => handleClaim(
                                 investment.id,
-                                investment.project?.contract_address,
-                                investment.project?.vesting_address
+                                investment.project?.contract_address || undefined,
+                                investment.project?.vesting_address || undefined
                               )}
                               disabled={claimingInvestmentId === investment.id}
                               className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-primary-500 to-accent-500 px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"

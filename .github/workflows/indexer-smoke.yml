@@ -156,12 +156,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: contracts/subgraph/package.json
 
       - name: Install subgraph dependencies
         working-directory: contracts/subgraph
-        run: npm ci
+        run: npm install
 
       - name: Generate types
         working-directory: contracts/subgraph

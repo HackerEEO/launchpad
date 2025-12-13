@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useProject } from '@/hooks/useProjects';
@@ -23,7 +23,7 @@ export const ProjectDetail = () => {
   const { id } = useParams<{ id: string }>();
   const { project, loading } = useProject(id);
   const { address, isConnected, connect, chainId } = useWallet();
-  const { invest: investOnChain, loading: txLoading } = useIDOPool();
+  const { invest: investOnChain } = useIDOPool();
   
   const [investmentAmount, setInvestmentAmount] = useState('');
   const [isInvesting, setIsInvesting] = useState(false);
@@ -32,11 +32,6 @@ export const ProjectDetail = () => {
   const [txStatus, setTxStatus] = useState<TransactionStatus>('idle');
   const [txHash, setTxHash] = useState<string | undefined>();
   const [txError, setTxError] = useState<string | undefined>();
-  const [gasEstimate, setGasEstimate] = useState<{
-    gasLimit: string;
-    gasCost: string;
-    totalCost: string;
-  } | undefined>();
 
   if (loading) {
     return <Loading fullScreen />;

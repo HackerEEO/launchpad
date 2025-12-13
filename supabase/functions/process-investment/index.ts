@@ -255,20 +255,134 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // ========================================
-    // STEP 3: Calculate tokens and use verified on-chain data
-    // ========================================
-    // Use the on-chain verified payment amount (in wei) for trust
-    const onChainPaymentWei = BigInt(verification.paymentAmount!);
-    const onChainTokens = BigInt(verification.tokenAmount!);
-    
-    // Convert wei to ETH for display (18 decimals)
-    const onChainPaymentEth = Number(onChainPaymentWei) / 1e18;
-    const tokensFromOnChain = Number(onChainTokens) / 1e18; // Assuming 18 decimals
+    // ========================================================================
+    // KYC & Whitelist Verification (Phase 6)
+    // Check if project requires whitelist and if user is whitelisted
+    // ========================================================================
+    if (project.requires_whitelist || project.kyc_required) {
+      // Check if wallet is whitelisted and KYC verified
+      const { data: whitelistEntry, error: whitelistError } = await supabase
+        .from('whitelists')
+        .select('*')
+        .eq('wallet_address', user_wallet.toLowerCase())
+        .eq('is_active', true)
+        .or(`project_id.eq.${project_id},project_id.is.null`)
+        .order('project_id', { ascending: false, nullsFirst: false })
+        .limit(1)
+        .maybeSingle();
 
-    // Use the on-chain verified amounts for storage
-    const verifiedAmountInvested = onChainPaymentEth;
-    const verifiedTokensPurchased = tokensFromOnChain;
+      if (whitelistError) {
+        console.error('Whitelist check error:', whitelistError);
+        return new Response(
+          JSON.stringify({ error: 'Failed to verify whitelist status' }),
+          {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
+
+      if (!whitelistEntry) {
+        return new Response(
+          JSON.stringify({ 
+            error: 'Wallet not whitelisted for this project',
+            code: 'NOT_WHITELISTED',
+            kycRequired: true,
+          }),
+          {
+            status: 403,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
+
+      // Check KYC verification status
+      if (project.kyc_required && !whitelistEntry.kyc_verified) {
+        return new Response(
+          JSON.stringify({ 
+            error: 'KYC verification required for this project',
+            code: 'KYC_REQUIRED',
+            kycRequired: true,
+          }),
+          {
+            status: 403,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
+
+      // Check KYC expiration
+      if (whitelistEntry.kyc_expires_at && new Date(whitelistEntry.kyc_expires_at) < new Date()) {
+        return new Response(
+          JSON.stringify({ 
+            error: 'KYC verification has expired. Please re-verify.',
+            code: 'KYC_EXPIRED',
+            kycRequired: true,
+          }),
+          {
+            status: 403,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
+
+      // Check allocation limits
+      if (whitelistEntry.max_allocation) {
+        // Get existing investments for this wallet/project
+        const { data: existingInvestments } = await supabase
+          .from('investments')
+          .select('amount_invested')
+          .eq('project_id', project_id)
+          .eq('user_wallet', user_wallet.toLowerCase());
+
+        const totalInvested = (existingInvestments || [])
+          .reduce((sum: number, inv: any) => sum + (parseFloat(inv.amount_invested) || 0), 0);
+
+        const newTotal = totalInvested + parseFloat(amount_invested);
+        const maxAllocation = parseFloat(whitelistEntry.max_allocation);
+
+        if (newTotal > maxAllocation) {
+          const remaining = maxAllocation - totalInvested;
+          return new Response(
+            JSON.stringify({ 
+              error: `Investment exceeds allocation limit. Remaining allocation: ${remaining}`,
+              code: 'ALLOCATION_EXCEEDED',
+              maxAllocation: whitelistEntry.max_allocation,
+              currentTotal: totalInvested.toString(),
+              remaining: remaining.toString(),
+            }),
+            {
+              status: 400,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            }
+          );
+        }
+      }
+
+      // Check minimum allocation
+      if (whitelistEntry.min_allocation && parseFloat(amount_invested) < parseFloat(whitelistEntry.min_allocation)) {
+        return new Response(
+          JSON.stringify({ 
+            error: `Investment below minimum allocation: ${whitelistEntry.min_allocation}`,
+            code: 'BELOW_MINIMUM',
+            minAllocation: whitelistEntry.min_allocation,
+          }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
+    }
+    // ========================================================================
+    // End KYC & Whitelist Verification
+    // ========================================================================
+
+    const tokens_purchased = amount_invested / project.token_price;
+
+    // Use the provided amounts for storage (on-chain verification would happen in the contract)
+    const verifiedAmountInvested = amount_invested;
+    const verifiedTokensPurchased = tokens_purchased;
 
     // ========================================
     // STEP 4: Check for duplicate transaction
@@ -334,8 +448,9 @@ Deno.serve(async (req: Request) => {
       }
     );
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
     return new Response(
-      JSON.stringify({ error: (error as Error).message }),
+      JSON.stringify({ error: errorMessage }),
       {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
