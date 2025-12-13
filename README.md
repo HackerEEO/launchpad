@@ -2,6 +2,45 @@
 
 A production-ready, full-stack crypto token launchpad platform where blockchain projects can launch token sales and users can participate in investments. Built with modern technologies and best practices.
 
+---
+
+## 📚 **Complete Documentation Available!**
+
+**New to the project?** We have comprehensive, beginner-friendly documentation covering everything from setup to deployment!
+
+### 🎯 Quick Links
+
+| Document | Description | For |
+|----------|-------------|-----|
+| **[📖 Documentation Index](./docs/README.md)** | Start here! Overview of all docs | Everyone |
+| **[🚀 Setup Guide](./docs/SETUP_GUIDE.md)** | Zero to running in 30 minutes | Beginners |
+| **[🏛️ Architecture](./docs/ARCHITECTURE.md)** | System design explained | Developers |
+| **[📁 Folder Structure](./docs/FOLDER_STRUCTURE.md)** | Every file explained | New developers |
+| **[🔐 Environment Variables](./docs/ENVIRONMENT_VARIABLES.md)** | All `.env` variables | Everyone |
+| **[🔗 Smart Contracts](./docs/COMPLETE_DOCUMENTATION.md#smart-contracts)** | Contract integration | Blockchain devs |
+| **[🚀 Deployment](./docs/COMPLETE_DOCUMENTATION.md#deployment-guide)** | Production deployment | DevOps |
+| **[📖 Best Practices](./docs/COMPLETE_DOCUMENTATION.md#best-practices)** | Coding standards | Developers |
+| **[🐛 Troubleshooting](./docs/COMPLETE_DOCUMENTATION.md#troubleshooting)** | Common issues | Everyone |
+
+### 🎓 Learning Paths
+
+**Complete Beginner?**
+1. [Documentation Index](./docs/README.md) → Understand what CryptoLaunch is
+2. [Setup Guide](./docs/SETUP_GUIDE.md) → Get it running locally
+3. [Folder Structure](./docs/FOLDER_STRUCTURE.md) → Learn the codebase
+
+**Developer Joining the Project?**
+1. [Setup Guide](./docs/SETUP_GUIDE.md) → Install and configure
+2. [Architecture](./docs/ARCHITECTURE.md) → Understand system design
+3. [Best Practices](./docs/COMPLETE_DOCUMENTATION.md#best-practices) → Follow standards
+
+**Deploying to Production?**
+1. [PRODUCTION_AUDIT_REPORT.md](./PRODUCTION_AUDIT_REPORT.md) → Review security audit
+2. [CRITICAL_FIXES.md](./CRITICAL_FIXES.md) → Fix vulnerabilities
+3. [Deployment Guide](./docs/COMPLETE_DOCUMENTATION.md#deployment-guide) → Deploy safely
+
+---
+
 ![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white)
 ![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
 ![Vite](https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white)

@@ -5,7 +5,7 @@
  * and bulk uploading whitelist entries.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -61,7 +61,7 @@ interface BulkUploadEntry {
 // API Functions
 // ============================================================================
 
-const API_BASE = import.meta.env.VITE_SUPABASE_URL;
+const API_BASE = (import.meta as any).env.VITE_SUPABASE_URL;
 
 async function fetchWithAuth(url: string, options: RequestInit = {}) {
   const token = localStorage.getItem('supabase.auth.token');
@@ -190,7 +190,6 @@ export default function KycReview() {
   // Modal states
   const [approveModal, setApproveModal] = useState<{ open: boolean; wallet?: string }>({ open: false });
   const [rejectModal, setRejectModal] = useState<{ open: boolean; wallet?: string }>({ open: false });
-  const [bulkUploadModal, setBulkUploadModal] = useState(false);
   
   // Form states
   const [approveForm, setApproveForm] = useState({
