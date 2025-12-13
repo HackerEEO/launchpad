@@ -227,18 +227,118 @@ crypto-launchpad/
 
 ## 🔄 Web3 Integration
 
+### Smart Contracts
+
+The platform includes production-ready smart contracts in `contracts/`:
+
+- **IDOPool.sol**: Main investment pool contract
+- **TokenVesting.sol**: Token vesting with cliff and linear release
+- **Whitelist.sol**: Merkle proof whitelist verification
+- **LaunchpadFactory.sol**: Factory for deploying new IDO pools
+- **MockERC20.sol**: Test token for development
+
+### Contract Hooks
+
+Custom React hooks for contract interactions (`src/contracts/hooks/`):
+
+```typescript
+// Investment hook
+const { poolInfo, invest, claim, refund } = useIDOPool(poolAddress);
+
+// Vesting hook  
+const { vestingSchedule, release, releasableAmount } = useTokenVesting(vestingAddress);
+
+// Token balance hook
+const { balance, allowance, approve } = useTokenBalance(tokenAddress, userAddress);
+```
+
 ### Wallet Connection
 - MetaMask support out of the box
-- Easy to add WalletConnect
+- WalletConnect integration
 - Network switching to Sepolia testnet
 - Balance display and transaction handling
 
 ### Transaction Flow
 1. User connects wallet
 2. Selects investment amount
-3. Reviews transaction details
-4. Confirms transaction
-5. Investment recorded in database
+3. Gas estimation is displayed
+4. User reviews and confirms transaction
+5. Transaction modal shows pending state
+6. On-chain transaction is verified by Supabase Edge Function
+7. Investment recorded in database with verified on-chain data
+
+### Supported Networks
+- Ethereum Mainnet (Chain ID: 1)
+- Sepolia Testnet (Chain ID: 11155111)
+- Arbitrum One (Chain ID: 42161)
+- Base (Chain ID: 8453)
+- Polygon (Chain ID: 137)
+
+## 🧪 Testing
+
+### Running Tests
+
+```bash
+# Run all tests
+npm test
+
+# Run tests in watch mode
+npm test -- --watch
+
+# Run tests with UI
+npm run test:ui
+
+# Generate coverage report
+npm run test:coverage
+```
+
+### Test Files
+
+Tests are located in `src/contracts/hooks/__tests__/`:
+- `useIDOPool.test.ts` - IDO Pool hook tests
+- `useTokenVesting.test.ts` - Vesting hook tests
+- `useTokenBalance.test.ts` - Token balance hook tests
+
+### Demo Investment Script
+
+Test the investment flow on Sepolia:
+
+```bash
+# Set environment variables
+export PRIVATE_KEY=your_private_key
+export IDO_POOL_ADDRESS=deployed_pool_address
+export SEPOLIA_RPC_URL=https://rpc.sepolia.org
+
+# Run demo
+node scripts/demo-invest.js
+```
+
+### Contract Tests
+
+Run Hardhat tests for smart contracts:
+
+```bash
+cd contracts
+npm test
+
+# Run specific test
+npx hardhat test test/IDOPool.test.ts
+
+# Run with coverage
+npx hardhat coverage
+```
+
+### Security Tests (Foundry)
+
+Run fuzz tests:
+
+```bash
+cd contracts
+forge test -vvv
+
+# Run specific fuzz test
+forge test --match-contract IDOPoolFuzzTest -vvv
+```
 
 ## 🚀 Deployment
 
