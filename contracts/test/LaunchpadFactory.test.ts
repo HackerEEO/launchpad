@@ -17,8 +17,8 @@ describe("LaunchpadFactory", function () {
     const [owner, feeCollector, creator1, creator2, user1] =
       await ethers.getSigners();
 
-    // Deploy factory
-    const FactoryContract = await ethers.getContractFactory("LaunchpadFactory");
+  // Deploy factory
+  const FactoryContract = await ethers.getContractFactory("src/LaunchpadFactory_FIXED.sol:LaunchpadFactory");
     const factory = await FactoryContract.deploy(
       owner.address,
       feeCollector.address,
@@ -61,7 +61,7 @@ describe("LaunchpadFactory", function () {
 
     it("Should revert if fee collector is zero address", async function () {
       const [owner] = await ethers.getSigners();
-      const FactoryContract = await ethers.getContractFactory("LaunchpadFactory");
+  const FactoryContract = await ethers.getContractFactory("src/LaunchpadFactory_FIXED.sol:LaunchpadFactory");
 
       await expect(
         FactoryContract.deploy(owner.address, ethers.ZeroAddress, PLATFORM_FEE)
@@ -70,7 +70,7 @@ describe("LaunchpadFactory", function () {
 
     it("Should revert if fee is too high", async function () {
       const [owner, feeCollector] = await ethers.getSigners();
-      const FactoryContract = await ethers.getContractFactory("LaunchpadFactory");
+  const FactoryContract = await ethers.getContractFactory("src/LaunchpadFactory_FIXED.sol:LaunchpadFactory");
 
       await expect(
         FactoryContract.deploy(owner.address, feeCollector.address, 1100) // > 10%
@@ -92,6 +92,9 @@ describe("LaunchpadFactory", function () {
       const startTime = (await time.latest()) + 3600;
       const endTime = startTime + 7 * 24 * 60 * 60;
 
+      const creationFee = await factory.creationFee();
+      const creationFee = await factory.creationFee();
+      const creationFee = await factory.creationFee();
       await expect(
         factory.connect(creator1).createPool(
           "Test Pool",
@@ -105,7 +108,8 @@ describe("LaunchpadFactory", function () {
           endTime,
           TGE_PERCENT,
           CLIFF_DURATION,
-          VESTING_DURATION
+          VESTING_DURATION,
+          { value: creationFee }
         )
       ).to.emit(factory, "PoolCreated");
 
@@ -120,8 +124,9 @@ describe("LaunchpadFactory", function () {
       const startTime = (await time.latest()) + 3600;
       const endTime = startTime + 7 * 24 * 60 * 60;
 
-      await factory.connect(creator1).createPool(
-        "Test Pool 1",
+  const creationFee = await factory.creationFee();
+  await factory.connect(creator1).createPool(
+  "Test Pool 1",
         await saleToken.getAddress(),
         TOKEN_PRICE,
         HARD_CAP,
@@ -133,10 +138,11 @@ describe("LaunchpadFactory", function () {
         TGE_PERCENT,
         CLIFF_DURATION,
         VESTING_DURATION
+        , { value: creationFee }
       );
 
-      await factory.connect(creator1).createPool(
-        "Test Pool 2",
+  await factory.connect(creator1).createPool(
+  "Test Pool 2",
         await saleToken.getAddress(),
         TOKEN_PRICE,
         HARD_CAP,
@@ -148,6 +154,7 @@ describe("LaunchpadFactory", function () {
         TGE_PERCENT,
         CLIFF_DURATION,
         VESTING_DURATION
+        , { value: creationFee }
       );
 
       const creatorPools = await factory.getPoolsByCreator(creator1.address);
@@ -160,6 +167,7 @@ describe("LaunchpadFactory", function () {
       const startTime = (await time.latest()) + 3600;
       const endTime = startTime + 7 * 24 * 60 * 60;
 
+      const creationFee2 = await factory.creationFee();
       await expect(
         factory.connect(creator1).createPool(
           "Test Pool",
@@ -173,8 +181,9 @@ describe("LaunchpadFactory", function () {
           endTime,
           TGE_PERCENT,
           CLIFF_DURATION,
-          VESTING_DURATION
-        )
+          VESTING_DURATION,
+            { value: await factory.creationFee() }
+          )
       ).to.be.revertedWithCustomError(factory, "InvalidAddress");
     });
 
@@ -186,6 +195,7 @@ describe("LaunchpadFactory", function () {
       const startTime = (await time.latest()) + 3600;
       const endTime = startTime + 7 * 24 * 60 * 60;
 
+      const creationFee3 = await factory.creationFee();
       await expect(
         factory.connect(creator1).createPool(
           "Test Pool",
@@ -199,8 +209,9 @@ describe("LaunchpadFactory", function () {
           endTime,
           TGE_PERCENT,
           CLIFF_DURATION,
-          VESTING_DURATION
-        )
+          VESTING_DURATION,
+            { value: await factory.creationFee() }
+          )
       ).to.be.revertedWithCustomError(factory, "HardCapTooLow");
     });
 
@@ -225,7 +236,8 @@ describe("LaunchpadFactory", function () {
           endTime,
           TGE_PERCENT,
           CLIFF_DURATION,
-          VESTING_DURATION
+          VESTING_DURATION,
+          { value: await factory.creationFee() }
         )
       ).to.be.revertedWithCustomError(factory, "InvalidTime");
     });
@@ -383,9 +395,8 @@ describe("LaunchpadFactory", function () {
       const startTime = (await time.latest()) + 3600;
       const endTime = startTime + 7 * 24 * 60 * 60;
 
-      await factory.connect(creator1).createPool(
-        "Pool 1",
-        await saleToken.getAddress(),
+        await expect(
+          factory.connect(creator1).createPool(
         TOKEN_PRICE,
         HARD_CAP,
         SOFT_CAP,
@@ -534,7 +545,8 @@ describe("LaunchpadFactory", function () {
       await factory.connect(owner).setDefaultWhitelist(await whitelist.getAddress());
 
       // Add user to whitelist
-      await whitelist.connect(owner).addToWhitelist(user1.address);
+  // Add user to whitelist with Bronze tier (1)
+  await whitelist.connect(owner).addToWhitelist(user1.address, 1);
 
       const startTime = (await time.latest()) + 3600;
       const endTime = startTime + 7 * 24 * 60 * 60;
@@ -561,9 +573,13 @@ describe("LaunchpadFactory", function () {
       // Move to sale start
       await time.increaseTo(startTime);
 
+      // Activate sale and set allocation for user
+      await pool.connect(creator1).activateSale();
+      await whitelist.connect(owner).setCustomAllocation(user1.address, ethers.parseEther("100"));
+
       // Invest
       await expect(
-        pool.connect(user1).invest({ value: ethers.parseEther("1") })
+        pool.connect(user1).invest(0, { value: ethers.parseEther("1") })
       ).to.emit(pool, "Investment");
 
       expect(await pool.investments(user1.address)).to.equal(

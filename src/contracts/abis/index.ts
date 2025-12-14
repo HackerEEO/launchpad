@@ -43,20 +43,19 @@ export const TokenVestingABI = [
   "function token() view returns (address)",
   "function getVestingScheduleCount() view returns (uint256)",
   "function getVestingScheduleCountByBeneficiary(address beneficiary) view returns (uint256)",
-  "function getVestingSchedule(bytes32 scheduleId) view returns (tuple(address beneficiary, uint256 totalAmount, uint256 releasedAmount, uint256 tgePercent, uint256 startTime, uint256 cliffDuration, uint256 vestingDuration, bool revocable, bool revoked))",
-  "function computeVestingScheduleId(address beneficiary, uint256 index) view returns (bytes32)",
-  "function computeReleasableAmount(bytes32 scheduleId) view returns (uint256)",
-  "function computeVestedAmount(bytes32 scheduleId) view returns (uint256)",
-  
+  "function getVestingSchedule(bytes32 scheduleId) view returns (tuple(address beneficiary, uint256 totalAmount, uint256 tgeAmount, uint256 tgeTimestamp, uint256 cliffDuration, uint256 vestingDuration, uint256 released, bool revoked, bool initialized))",
+  "function getScheduleIds(address beneficiary) view returns (bytes32[])",
+  "function releasableAmount(bytes32 scheduleId) view returns (uint256)",
+  "function vestedAmount(bytes32 scheduleId) view returns (uint256)",
+
   // Write functions
   "function release(bytes32 scheduleId)",
-  "function transferBeneficiary(bytes32 scheduleId, address newBeneficiary)",
-  
+  "function revoke(bytes32 scheduleId)",
+
   // Events
-  "event VestingScheduleCreated(bytes32 indexed scheduleId, address indexed beneficiary, uint256 amount)",
-  "event TokensReleased(address indexed beneficiary, uint256 amount)",
-  "event VestingScheduleRevoked(bytes32 indexed scheduleId)",
-  "event BeneficiaryTransferred(bytes32 indexed scheduleId, address indexed oldBeneficiary, address indexed newBeneficiary)",
+  "event VestingScheduleCreated(bytes32 indexed scheduleId, address indexed beneficiary, uint256 totalAmount, uint256 tgeAmount, uint256 tgeTimestamp, uint256 cliffDuration, uint256 vestingDuration)",
+  "event TokensReleased(bytes32 indexed scheduleId, address indexed beneficiary, uint256 amount)",
+  "event VestingRevoked(bytes32 indexed scheduleId, uint256 refundAmount)",
 ] as const;
 
 export const LaunchpadFactoryABI = [
