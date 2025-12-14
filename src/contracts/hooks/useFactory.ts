@@ -3,6 +3,7 @@ import { BrowserProvider, Contract } from 'ethers';
 import { LaunchpadFactoryABI } from '../abis';
 import { useWalletStore } from '../../store/walletStore';
 import { getContractAddresses } from '../addresses';
+import resolveAddresses from '../network';
 
 export interface PoolDetails {
   poolAddress: string;
@@ -50,7 +51,7 @@ export function useLaunchpadFactory(): UseFactoryReturn {
       return null;
     }
 
-    const addresses = getContractAddresses(chainId);
+  const addresses = resolveAddresses(chainId) ?? getContractAddresses(chainId);
     if (!addresses || !addresses.LAUNCHPAD_FACTORY) {
       setError(`Factory not deployed on chain ${chainId}`);
       return null;

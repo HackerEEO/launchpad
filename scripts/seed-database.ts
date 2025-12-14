@@ -1,9 +1,13 @@
+import 'dotenv/config';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || '';
-const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || '';
+// Prefer service role key for seeding (bypasses RLS). Fall back to anon key.
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE || process.env.VITE_SUPABASE_ANON_KEY || '';
 
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabase = createClient(supabaseUrl, supabaseKey, {
+  auth: { persistSession: false },
+});
 
 const mockProjects = [
   {
@@ -355,40 +359,72 @@ async function seedDatabase() {
     console.log(`✓ Seeded ${projectsData.length} projects`);
 
     console.log('Seeding blog posts...');
-    const { data: blogData, error: blogError } = await supabase
-      .from('blog_posts')
-      .insert(blogPosts)
-      .select();
+    try {
+      const { data: blogData, error: blogError } = await supabase
+        .from('blog_posts')
+        .insert(blogPosts)
+        .select();
 
-    if (blogError) throw blogError;
-    console.log(`✓ Seeded ${blogData.length} blog posts`);
+      if (blogError) throw blogError;
+      console.log(`✓ Seeded ${blogData.length} blog posts`);
+    } catch (err: any) {
+      if (err.code === '23505') {
+        console.log('⚠️  Some blog posts already exist; skipping duplicates.');
+      } else {
+        throw err;
+      }
+    }
 
     console.log('Seeding FAQs...');
-    const { data: faqData, error: faqError } = await supabase
-      .from('faqs')
-      .insert(faqs)
-      .select();
+    try {
+      const { data: faqData, error: faqError } = await supabase
+        .from('faqs')
+        .insert(faqs)
+        .select();
 
-    if (faqError) throw faqError;
-    console.log(`✓ Seeded ${faqData.length} FAQs`);
+      if (faqError) throw faqError;
+      console.log(`✓ Seeded ${faqData.length} FAQs`);
+    } catch (err: any) {
+      if (err.code === '23505') {
+        console.log('⚠️  Some FAQs already exist; skipping duplicates.');
+      } else {
+        throw err;
+      }
+    }
 
     console.log('Seeding team members...');
-    const { data: teamData, error: teamError } = await supabase
-      .from('team_members')
-      .insert(teamMembers)
-      .select();
+    try {
+      const { data: teamData, error: teamError } = await supabase
+        .from('team_members')
+        .insert(teamMembers)
+        .select();
 
-    if (teamError) throw teamError;
-    console.log(`✓ Seeded ${teamData.length} team members`);
+      if (teamError) throw teamError;
+      console.log(`✓ Seeded ${teamData.length} team members`);
+    } catch (err: any) {
+      if (err.code === '23505') {
+        console.log('⚠️  Some team members already exist; skipping duplicates.');
+      } else {
+        throw err;
+      }
+    }
 
     console.log('Seeding job postings...');
-    const { data: jobData, error: jobError } = await supabase
-      .from('job_postings')
-      .insert(jobPostings)
-      .select();
+    try {
+      const { data: jobData, error: jobError } = await supabase
+        .from('job_postings')
+        .insert(jobPostings)
+        .select();
 
-    if (jobError) throw jobError;
-    console.log(`✓ Seeded ${jobData.length} job postings`);
+      if (jobError) throw jobError;
+      console.log(`✓ Seeded ${jobData.length} job postings`);
+    } catch (err: any) {
+      if (err.code === '23505') {
+        console.log('⚠️  Some job postings already exist; skipping duplicates.');
+      } else {
+        throw err;
+      }
+    }
 
     console.log('\n✓ Database seeding completed successfully!');
   } catch (error) {

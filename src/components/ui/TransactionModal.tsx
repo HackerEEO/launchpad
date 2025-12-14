@@ -4,7 +4,7 @@
  * Shows gas estimates, pending state, confirmation, and explorer links
  */
 
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 

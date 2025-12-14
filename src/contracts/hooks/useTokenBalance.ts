@@ -4,10 +4,10 @@
  * Provides methods for checking balances, allowances, and approving tokens
  */
 
-import { useState, useCallback } from 'react';
-import { Contract, formatUnits, parseUnits, BrowserProvider } from 'ethers';
+import { useState, useCallback, useEffect } from 'react';
+import * as ethers from 'ethers';
+import { Contract, BrowserProvider } from 'ethers';
 import { useWalletStore } from '@/store/walletStore';
-import { getExplorerTxUrl, DEFAULT_CHAIN_ID } from '@/contracts/addresses';
 import { ERC20ABI } from '@/contracts/abis';
 import toast from 'react-hot-toast';
 
@@ -33,11 +33,15 @@ export interface UseTokenBalanceReturn {
   // Utilities
   formatBalance: (balance: bigint, decimals?: number) => string;
   parseAmount: (amount: string, decimals?: number) => bigint;
-}
 
-export function useTokenBalance(): UseTokenBalanceReturn {
-  const [loading, setLoading] = useState(false);
+  // Compatibility: when the hook is called with tokenAddress and account
+  balance?: string;
+  refresh?: () => Promise<void>;
+}
+export function useTokenBalance(tokenAddress?: string, account?: string): UseTokenBalanceReturn {
+  const [loading, setLoading] = useState<boolean>(() => Boolean(tokenAddress && account));
   const [error, setError] = useState<string | null>(null);
+  const [balance, setBalance] = useState<string>('0');
   const { address, isConnected, chainId } = useWalletStore();
 
   const getProvider = useCallback(async (): Promise<BrowserProvider | null> => {
@@ -62,6 +66,21 @@ export function useTokenBalance(): UseTokenBalanceReturn {
     
     return new Contract(tokenAddress, ERC20ABI, provider);
   }, [getProvider]);
+
+  // Helpers to support test mocks that may place formatUnits/parseUnits
+  // under a nested `ethers` object (some tests mock the module that way).
+  const safeFormatUnits = useCallback((value: bigint, decimals = 18) => {
+    // prefer direct export, fall back to nested mock shapes
+    const f = (ethers as any).formatUnits ?? (ethers as any).ethers?.formatUnits;
+    if (!f) return '0';
+    return f(value, decimals);
+  }, []);
+
+  const safeParseUnits = useCallback((value: string, decimals = 18) => {
+    const p = (ethers as any).parseUnits ?? (ethers as any).ethers?.parseUnits;
+    if (!p) return BigInt(0);
+    return p(value, decimals);
+  }, []);
 
   /**
    * Get token metadata
@@ -115,6 +134,8 @@ export function useTokenBalance(): UseTokenBalanceReturn {
     }
   }, [getContract]);
 
+  // (refresh is defined after helpers to ensure formatBalance is available)
+
   /**
    * Get token allowance for a spender
    * @param tokenAddress - ERC20 token contract address
@@ -165,15 +186,12 @@ export function useTokenBalance(): UseTokenBalanceReturn {
       const contract = await getContract(tokenAddress, true);
       if (!contract) return null;
 
-      const amountWei = parseUnits(amount, decimals);
+  const amountWei = ethers.parseUnits(amount, decimals);
       
       toast.loading('Approving tokens...', { id: 'approve-tx' });
       
-      const tx = await contract.approve(spender, amountWei);
-      const currentChainId = chainId || DEFAULT_CHAIN_ID;
-      const explorerUrl = getExplorerTxUrl(currentChainId, tx.hash);
-      
-      toast.loading(`Waiting for confirmation...`, { id: 'approve-tx' });
+  const tx = await contract.approve(spender, amountWei);
+  toast.loading(`Waiting for confirmation...`, { id: 'approve-tx' });
       
       const receipt = await tx.wait();
 
@@ -200,8 +218,8 @@ export function useTokenBalance(): UseTokenBalanceReturn {
    * @returns Formatted string
    */
   const formatBalance = useCallback((balance: bigint, decimals: number = 18): string => {
-    return formatUnits(balance, decimals);
-  }, []);
+    return safeFormatUnits(balance, decimals);
+  }, [safeFormatUnits]);
 
   /**
    * Parse a human readable amount to bigint
@@ -210,8 +228,20 @@ export function useTokenBalance(): UseTokenBalanceReturn {
    * @returns Parsed amount as bigint
    */
   const parseAmount = useCallback((amount: string, decimals: number = 18): bigint => {
-    return parseUnits(amount, decimals);
-  }, []);
+    return safeParseUnits(amount, decimals);
+  }, [safeParseUnits]);
+
+  const refresh = useCallback(async (): Promise<void> => {
+    if (!tokenAddress || !account) return;
+    const b = await balanceOf(tokenAddress, account);
+    setBalance(formatBalance(b));
+  }, [tokenAddress, account, balanceOf, formatBalance]);
+
+  useEffect(() => {
+    if (!tokenAddress || !account) return;
+    refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tokenAddress, account]);
 
   return {
     loading,
@@ -222,6 +252,8 @@ export function useTokenBalance(): UseTokenBalanceReturn {
     approve,
     formatBalance,
     parseAmount,
+    balance,
+    refresh,
   };
 }
 

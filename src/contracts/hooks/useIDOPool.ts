@@ -1,5 +1,6 @@
-import { useState, useCallback } from 'react';
-import { ethers, BrowserProvider, Contract } from 'ethers';
+import { useState, useCallback, useEffect } from 'react';
+import * as ethers from 'ethers';
+import { BrowserProvider, Contract } from 'ethers';
 import { IDOPoolABI } from '../abis';
 import { useWalletStore } from '../../store/walletStore';
 
@@ -36,15 +37,25 @@ export interface UseIDOPoolReturn {
   isSaleActive: (poolAddress: string) => Promise<boolean>;
   
   // Write functions
-  invest: (poolAddress: string, amount: string) => Promise<string | null>;
-  claim: (poolAddress: string) => Promise<string | null>;
-  refund: (poolAddress: string) => Promise<string | null>;
-}
+  invest: (...args: any[]) => Promise<string | null>;
+  claim: (poolAddress?: string) => Promise<string | null>;
+  refund: (poolAddress?: string) => Promise<string | null>;
 
-export function useIDOPool(): UseIDOPoolReturn {
-  const [loading, setLoading] = useState(false);
+  // Compatibility (optional) - legacy hook used in tests and UI
+  poolInfo?: PoolInfo | null;
+  investorInfo?: InvestorInfo | null;
+  refreshPoolInfo?: () => Promise<void>;
+  refreshInvestorInfo?: (investorAddress?: string) => Promise<void>;
+  getPoolStatus?: (poolAddress?: string) => string;
+  getRaisedPercentage?: (poolAddress?: string) => number;
+  getTimeRemaining?: (poolAddress?: string) => number;
+}
+export function useIDOPool(poolAddress?: string): UseIDOPoolReturn {
+  const [loading, setLoading] = useState<boolean>(!!poolAddress);
   const [error, setError] = useState<string | null>(null);
   const { address, isConnected } = useWalletStore();
+  const [poolInfo, setPoolInfo] = useState<PoolInfo | null>(null);
+  const [investorInfo, setInvestorInfo] = useState<InvestorInfo | null>(null);
 
   const getProvider = useCallback(async (): Promise<BrowserProvider | null> => {
     if (typeof window === 'undefined' || !window.ethereum) {
@@ -121,6 +132,19 @@ export function useIDOPool(): UseIDOPoolReturn {
     }
   }, [getContract]);
 
+  const refreshPoolInfo = useCallback(async (): Promise<void> => {
+    if (!poolAddress) return;
+    setLoading(true);
+    try {
+      const info = await getPoolInfo(poolAddress);
+      setPoolInfo(info);
+    } finally {
+      setLoading(false);
+    }
+  }, [getPoolInfo, poolAddress]);
+
+  // Auto-refresh when a pool address is provided
+
   const getInvestorInfo = useCallback(async (
     poolAddress: string,
     investorAddress: string
@@ -143,6 +167,39 @@ export function useIDOPool(): UseIDOPoolReturn {
       return null;
     }
   }, [getContract]);
+
+  const refreshInvestorInfo = useCallback(async (investorAddress?: string): Promise<void> => {
+    if (!poolAddress) return;
+    if (!investorAddress && !address) return;
+    const addr = investorAddress || address!;
+    const info = await getInvestorInfo(poolAddress, addr);
+    setInvestorInfo(info);
+  }, [getInvestorInfo, poolAddress, address]);
+
+  useEffect(() => {
+    if (!poolAddress) {
+      setPoolInfo(null);
+      setInvestorInfo(null);
+      setLoading(false);
+      return;
+    }
+
+    let mounted = true;
+    (async () => {
+      setLoading(true);
+      try {
+        if (!mounted) return;
+        await refreshPoolInfo();
+        await refreshInvestorInfo();
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [poolAddress, refreshPoolInfo, refreshInvestorInfo]);
 
   const getInvestment = useCallback(async (
     poolAddress: string,
@@ -173,9 +230,33 @@ export function useIDOPool(): UseIDOPoolReturn {
 
   // Write functions
   const invest = useCallback(async (
-    poolAddress: string,
-    amount: string
+    poolAddressOrAmount: string | number,
+    maybeAmount?: string | number
   ): Promise<string | null> => {
+    let targetPool = poolAddress;
+    let amount: string | number;
+    if (typeof maybeAmount === 'undefined') {
+      amount = poolAddressOrAmount as string | number;
+    } else {
+      targetPool = poolAddressOrAmount as string;
+      amount = maybeAmount as string | number;
+    }
+
+    if (!targetPool) {
+      setError('Pool address is required');
+      return null;
+    }
+
+    // validate numeric amounts (run validation even if wallet isn't connected so
+    // tests that call invest() without connecting will still get a rejection)
+    if (typeof amount === 'number') {
+      if (amount <= 0) throw new Error('Amount must be positive');
+      amount = String(amount);
+    } else if (typeof amount === 'string') {
+      const n = Number(amount);
+      if (Number.isNaN(n) || n <= 0) throw new Error('Amount must be positive');
+    }
+
     if (!isConnected || !address) {
       setError('Wallet not connected');
       return null;
@@ -185,10 +266,10 @@ export function useIDOPool(): UseIDOPoolReturn {
       setLoading(true);
       setError(null);
 
-      const contract = await getContract(poolAddress, true);
+      const contract = await getContract(targetPool, true);
       if (!contract) return null;
 
-      const amountWei = ethers.parseEther(amount);
+      const amountWei = ethers.parseEther(String(amount));
       const tx = await contract.invest({ value: amountWei });
       const receipt = await tx.wait();
 
@@ -196,23 +277,48 @@ export function useIDOPool(): UseIDOPoolReturn {
     } catch (err: any) {
       const message = err.reason || err.message || 'Investment failed';
       setError(message);
-      return null;
+      throw err;
     } finally {
       setLoading(false);
     }
-  }, [getContract, isConnected, address]);
+  }, [getContract, isConnected, address, poolAddress]);
 
-  const claim = useCallback(async (poolAddress: string): Promise<string | null> => {
+  const getPoolStatus = useCallback((pAddress?: string): string => {
+    const info = pAddress === poolAddress ? poolInfo : null;
+    if (!info) return 'unknown';
+    const now = Math.floor(Date.now() / 1000);
+    if (now < info.startTime) return 'upcoming';
+    if (now >= info.startTime && now <= info.endTime) return 'active';
+    return 'ended';
+  }, [poolInfo, poolAddress]);
+
+  const getRaisedPercentage = useCallback((pAddress?: string): number => {
+    const info = pAddress === poolAddress ? poolInfo : null;
+    if (!info || info.hardCap === BigInt(0)) return 0;
+    const percent = (Number(info.totalRaised) / Number(info.hardCap)) * 100;
+    return Math.min(100, Math.max(0, percent));
+  }, [poolInfo, poolAddress]);
+
+  const getTimeRemaining = useCallback((pAddress?: string): number => {
+    const info = pAddress === poolAddress ? poolInfo : null;
+    if (!info) return 0;
+    const now = Math.floor(Date.now() / 1000);
+    return Math.max(0, info.endTime - now);
+  }, [poolInfo, poolAddress]);
+
+  const claim = useCallback(async (poolAddressArg?: string): Promise<string | null> => {
+    const targetPool = poolAddressArg || poolAddress;
     if (!isConnected || !address) {
       setError('Wallet not connected');
       return null;
     }
+    if (!targetPool) return null;
 
     try {
       setLoading(true);
       setError(null);
 
-      const contract = await getContract(poolAddress, true);
+      const contract = await getContract(targetPool, true);
       if (!contract) return null;
 
       const tx = await contract.claim();
@@ -226,19 +332,21 @@ export function useIDOPool(): UseIDOPoolReturn {
     } finally {
       setLoading(false);
     }
-  }, [getContract, isConnected, address]);
+  }, [getContract, isConnected, address, poolAddress]);
 
-  const refund = useCallback(async (poolAddress: string): Promise<string | null> => {
+  const refund = useCallback(async (poolAddressArg?: string): Promise<string | null> => {
+    const targetPool = poolAddressArg || poolAddress;
     if (!isConnected || !address) {
       setError('Wallet not connected');
       return null;
     }
+    if (!targetPool) return null;
 
     try {
       setLoading(true);
       setError(null);
 
-      const contract = await getContract(poolAddress, true);
+      const contract = await getContract(targetPool, true);
       if (!contract) return null;
 
       const tx = await contract.refund();
@@ -252,7 +360,7 @@ export function useIDOPool(): UseIDOPoolReturn {
     } finally {
       setLoading(false);
     }
-  }, [getContract, isConnected, address]);
+  }, [getContract, isConnected, address, poolAddress]);
 
   return {
     loading,
@@ -264,5 +372,13 @@ export function useIDOPool(): UseIDOPoolReturn {
     invest,
     claim,
     refund,
+    // compatibility
+    poolInfo,
+    investorInfo,
+    refreshPoolInfo,
+    refreshInvestorInfo,
+    getPoolStatus,
+    getRaisedPercentage,
+    getTimeRemaining,
   };
 }

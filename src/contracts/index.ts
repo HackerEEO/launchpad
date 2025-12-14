@@ -3,4 +3,5 @@
 
 export * from './abis';
 export * from './addresses';
+export * from './addresses.hardhat';
 export * from './hooks';

@@ -4,10 +4,37 @@ import { useTokenBalance } from '../useTokenBalance';
 
 // Mock ethers
 vi.mock('ethers', () => ({
+  // provide top-level exports and a nested `ethers` namespace for compatibility
+  Contract: vi.fn().mockImplementation(() => ({
+    balanceOf: vi.fn().mockResolvedValue(BigInt('1000000000000000000000')), // 1000 tokens
+    allowance: vi.fn().mockResolvedValue(BigInt('500000000000000000000')), // 500 tokens
+    decimals: vi.fn().mockResolvedValue(18),
+    symbol: vi.fn().mockResolvedValue('TEST'),
+    name: vi.fn().mockResolvedValue('Test Token'),
+    approve: vi.fn().mockImplementation(async () => ({
+      hash: '0xmockapprovehash123',
+      wait: vi.fn().mockResolvedValue({
+        status: 1,
+        transactionHash: '0xmockapprovehash123',
+      }),
+    })),
+  })),
+  BrowserProvider: vi.fn().mockImplementation(() => ({
+    getSigner: vi.fn().mockResolvedValue({
+      address: '0xTestUser123456789012345678901234567890ab',
+    }),
+  })),
+  formatUnits: vi.fn().mockImplementation((value: bigint, decimals: number) => 
+    (Number(value) / Math.pow(10, decimals)).toString()
+  ),
+  parseUnits: vi.fn().mockImplementation((value: string, decimals: number) => 
+    BigInt(Math.floor(parseFloat(value) * Math.pow(10, decimals)))
+  ),
+  MaxUint256: BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'),
   ethers: {
     Contract: vi.fn().mockImplementation(() => ({
-      balanceOf: vi.fn().mockResolvedValue(BigInt('1000000000000000000000')), // 1000 tokens
-      allowance: vi.fn().mockResolvedValue(BigInt('500000000000000000000')), // 500 tokens
+      balanceOf: vi.fn().mockResolvedValue(BigInt('1000000000000000000000')),
+      allowance: vi.fn().mockResolvedValue(BigInt('500000000000000000000')),
       decimals: vi.fn().mockResolvedValue(18),
       symbol: vi.fn().mockResolvedValue('TEST'),
       name: vi.fn().mockResolvedValue('Test Token'),

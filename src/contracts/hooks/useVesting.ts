@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { ethers, BrowserProvider, Contract } from 'ethers';
+import { BrowserProvider, Contract } from 'ethers';
 import { TokenVestingABI } from '../abis';
 import { useWalletStore } from '../../store/walletStore';
 
@@ -28,14 +28,23 @@ export interface UseVestingReturn {
   getAllSchedulesForBeneficiary: (vestingAddress: string, beneficiary: string) => Promise<VestingSchedule[]>;
   
   // Write functions
-  release: (vestingAddress: string, scheduleId: string) => Promise<string | null>;
+  release: (vestingAddress?: string, scheduleId?: string) => Promise<string | null>;
   transferBeneficiary: (vestingAddress: string, scheduleId: string, newBeneficiary: string) => Promise<string | null>;
-}
 
-export function useVesting(): UseVestingReturn {
-  const [loading, setLoading] = useState(false);
+  // Compatibility
+  vestingSchedule?: VestingSchedule | null;
+  releasableAmount?: string;
+  refreshSchedule?: () => Promise<void>;
+  getVestedPercentage?: () => number;
+  getTimeUntilNextRelease?: () => number;
+  isCliffPassed?: () => boolean;
+}
+export function useVesting(vestingAddress?: string): UseVestingReturn {
+  const [loading, setLoading] = useState<boolean>(!!vestingAddress);
   const [error, setError] = useState<string | null>(null);
   const { address, isConnected } = useWalletStore();
+  const [vestingSchedule, setVestingSchedule] = useState<VestingSchedule | null>(null);
+  const [releasableAmt, setReleasableAmt] = useState<string>('0');
 
   const getProvider = useCallback(async (): Promise<BrowserProvider | null> => {
     if (typeof window === 'undefined' || !window.ethereum) {
@@ -87,6 +96,8 @@ export function useVesting(): UseVestingReturn {
       return null;
     }
   }, [getContract]);
+
+  // refreshSchedule will be defined after helpers that it depends on
 
   const getScheduleId = useCallback(async (
     vestingAddress: string,
@@ -140,6 +151,28 @@ export function useVesting(): UseVestingReturn {
     }
   }, [getContract]);
 
+  const refreshSchedule = useCallback(async (): Promise<void> => {
+    if (!vestingAddress) return;
+    setLoading(true);
+    try {
+      // Attempt to read the schedule by using getVestingSchedule(beneficiary)
+      const schedule = await getSchedule(vestingAddress, address || '');
+      setVestingSchedule(schedule);
+
+      // Try to read releasable amount
+      try {
+        const amount = await getReleasableAmount(vestingAddress, address || '');
+        // format using simple conversion (18 decimals)
+        const formatted = (Number(amount) / 1e18).toString();
+        setReleasableAmt(formatted);
+      } catch {
+        setReleasableAmt('0');
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [getSchedule, getReleasableAmount, vestingAddress, address]);
+
   const getVestedAmount = useCallback(async (
     vestingAddress: string,
     scheduleId: string
@@ -181,23 +214,23 @@ export function useVesting(): UseVestingReturn {
   }, [getContract, getScheduleCount, getScheduleId, getSchedule]);
 
   // Write functions
-  const release = useCallback(async (
-    vestingAddress: string,
-    scheduleId: string
-  ): Promise<string | null> => {
+  const release = useCallback(async (vestingAddressArg?: string, _scheduleId?: string): Promise<string | null> => {
+    const target = vestingAddressArg || vestingAddress;
     if (!isConnected || !address) {
       setError('Wallet not connected');
       return null;
     }
+    if (!target) return null;
 
     try {
       setLoading(true);
       setError(null);
 
-      const contract = await getContract(vestingAddress, true);
+      const contract = await getContract(target, true);
       if (!contract) return null;
 
-      const tx = await contract.release(scheduleId);
+      // TokenVesting.release does not require params in the current contract
+      const tx = await contract.release();
       const receipt = await tx.wait();
 
       return receipt.hash;
@@ -208,12 +241,31 @@ export function useVesting(): UseVestingReturn {
     } finally {
       setLoading(false);
     }
-  }, [getContract, isConnected, address]);
+  }, [getContract, isConnected, address, vestingAddress]);
+
+  const getVestedPercentage = useCallback((): number => {
+    if (!vestingSchedule) return 0;
+    if (vestingSchedule.totalAmount === BigInt(0)) return 0;
+    return (Number(vestingSchedule.releasedAmount) / Number(vestingSchedule.totalAmount)) * 100;
+  }, [vestingSchedule]);
+
+  const getTimeUntilNextRelease = useCallback((): number => {
+    if (!vestingSchedule) return 0;
+    const now = Math.floor(Date.now() / 1000);
+    // simplistic: time until TGE (tgeTimestamp) or 0
+    return Math.max(0, vestingSchedule.tgeTimestamp - now);
+  }, [vestingSchedule]);
+
+  const isCliffPassed = useCallback((): boolean => {
+    if (!vestingSchedule) return false;
+    const now = Math.floor(Date.now() / 1000);
+    return now >= vestingSchedule.tgeTimestamp + vestingSchedule.cliffDuration;
+  }, [vestingSchedule]);
 
   const transferBeneficiary = useCallback(async (
-    vestingAddress: string,
-    scheduleId: string,
-    newBeneficiary: string
+    _vestingAddress: string,
+    _scheduleId: string,
+    _newBeneficiary: string
   ): Promise<string | null> => {
     // Not implemented in current TokenVesting contract
     setError('transferBeneficiary is not supported by the current contract');
@@ -231,5 +283,12 @@ export function useVesting(): UseVestingReturn {
     getAllSchedulesForBeneficiary,
     release,
     transferBeneficiary,
+    // compatibility
+    vestingSchedule,
+    releasableAmount: releasableAmt,
+    refreshSchedule,
+    getVestedPercentage,
+    getTimeUntilNextRelease,
+    isCliffPassed,
   };
 }

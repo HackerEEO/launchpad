@@ -1,0 +1,18 @@
+{
+  "network": "hardhat",
+  "chainId": 31337,
+  "deployer": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+  "timestamp": "2025-12-14T09:03:43.242Z",
+  "contracts": {
+    "Whitelist": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+    "TokenVesting": "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9",
+    "LaunchpadFactory": "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9",
+    "MockERC20": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"
+  },
+  "txHashes": {
+    "Whitelist": "0x391ff5372339032be9c880ce188d8c31224c7ebb55ae7ea031dcc32b27737a56",
+    "TokenVesting": "0x412dcb94b242c7b1efb223abd7a830070144ae22297e271a26b660435d969055",
+    "LaunchpadFactory": "0x27877903fc8d43b782745e18ed69905185fab6e84aeac4f4bb3998d846991c52",
+    "MockERC20": "0xfb28bf02bc340f72bbbabb48555432f1a59cde4712c9fa93f76eb9394b5882c7"
+  }
+}
