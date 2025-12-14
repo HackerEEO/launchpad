@@ -1,0 +1,144 @@
+# CryptoLaunch Subgraph Schema
+# Indexes Investment and TokensClaimed events from IDOPool contracts
+
+"""
+Investment entity - tracks all investments made to IDO pools
+"""
+type Investment @entity(immutable: true) {
+  "Unique ID: txHash-logIndex"
+  id: ID!
+  
+  "Investor wallet address"
+  investor: Bytes!
+  
+  "IDO Pool contract address"
+  pool: Bytes!
+  
+  "Payment amount in wei (ETH/native token)"
+  paymentAmount: BigInt!
+  
+  "Token amount purchased (in token decimals)"
+  tokenAmount: BigInt!
+  
+  "Block timestamp"
+  timestamp: BigInt!
+  
+  "Block number"
+  blockNumber: BigInt!
+  
+  "Transaction hash"
+  transactionHash: Bytes!
+  
+  "Log index within transaction"
+  logIndex: BigInt!
+}
+
+"""
+TokenClaim entity - tracks all token claims from IDO pools
+"""
+type TokenClaim @entity(immutable: true) {
+  "Unique ID: txHash-logIndex"
+  id: ID!
+  
+  "Claimer wallet address"
+  investor: Bytes!
+  
+  "Contract address (IDOPool or TokenVesting)"
+  pool: Bytes!
+  
+  "Amount of tokens claimed"
+  amount: BigInt!
+  
+  "Block timestamp"
+  timestamp: BigInt!
+  
+  "Block number"
+  blockNumber: BigInt!
+  
+  "Transaction hash"
+  transactionHash: Bytes!
+  
+  "Log index within transaction"
+  logIndex: BigInt!
+}
+
+"""
+Refund entity - tracks refunds when soft cap not reached
+"""
+type Refund @entity(immutable: true) {
+  "Unique ID: txHash-logIndex"
+  id: ID!
+  
+  "Investor wallet address"
+  investor: Bytes!
+  
+  "IDO Pool contract address"
+  pool: Bytes!
+  
+  "Refund amount in wei"
+  amount: BigInt!
+  
+  "Block timestamp"
+  timestamp: BigInt!
+  
+  "Block number"
+  blockNumber: BigInt!
+  
+  "Transaction hash"
+  transactionHash: Bytes!
+  
+  "Log index within transaction"
+  logIndex: BigInt!
+}
+
+"""
+PoolStats entity - aggregated statistics per IDO pool
+"""
+type PoolStats @entity {
+  "Pool contract address"
+  id: ID!
+  
+  "Total ETH raised in wei"
+  totalRaised: BigInt!
+  
+  "Total tokens sold"
+  totalTokensSold: BigInt!
+  
+  "Total tokens claimed"
+  totalTokensClaimed: BigInt!
+  
+  "Number of unique investors"
+  investorCount: BigInt!
+  
+  "Number of investments"
+  investmentCount: BigInt!
+  
+  "Number of claims"
+  claimCount: BigInt!
+  
+  "Last updated timestamp"
+  lastUpdated: BigInt!
+}
+
+"""
+InvestorStats entity - aggregated statistics per investor
+"""
+type InvestorStats @entity {
+  "Investor wallet address"
+  id: ID!
+  
+  "Total ETH invested across all pools"
+  totalInvested: BigInt!
+  
+  "Total tokens purchased across all pools"
+  totalTokensPurchased: BigInt!
+  
+  "Total tokens claimed across all pools"
+  totalTokensClaimed: BigInt!
+  
+  "Number of pools invested in"
+  poolCount: BigInt!
+  
+  "Last activity timestamp"
+  lastActivity: BigInt!
+}

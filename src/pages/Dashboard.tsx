@@ -2,15 +2,19 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useState } from 'react';
 import { useWallet } from '@/hooks/useWallet';
 import { usePortfolio, useInvestments } from '@/hooks/useInvestments';
+import { useIDOPool, useVesting } from '@/contracts/hooks';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { StatCard, StatIcons } from '@/components/ui/StatCard';
 import { ListSkeleton, StatCardSkeleton } from '@/components/ui/LoadingState';
 import { EmptyState, EmptyStateIcons } from '@/components/ui/EmptyState';
+import { TransactionModal, TransactionStatus } from '@/components/ui/TransactionModal';
 import { formatCurrency, formatDateTime, formatWalletAddress } from '@/utils/helpers';
+import { getExplorerTxUrl, DEFAULT_CHAIN_ID } from '@/contracts/addresses';
 import { Link, useNavigate } from 'react-router-dom';
 import type { WalletType } from '@/components/wallet/WalletModal';
 import { WalletModal } from '@/components/wallet/WalletModal';
+import toast from 'react-hot-toast';
 
 // Animation variants
 const containerVariants = {
@@ -30,15 +34,69 @@ const itemVariants = {
 
 export const Dashboard = () => {
   const navigate = useNavigate();
-  const { address, isConnected, connect, balance, isConnecting } = useWallet();
+  const { address, isConnected, connect, balance, isConnecting, chainId } = useWallet();
   const { portfolio, loading: portfolioLoading } = usePortfolio(address);
-  const { investments, loading: investmentsLoading } = useInvestments(address);
+  const { investments, loading: investmentsLoading, refresh: refreshInvestments } = useInvestments(address);
+  const { claim: claimFromPool } = useIDOPool();
+  const { release: releaseVesting } = useVesting();
+  
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
+  const [showClaimModal, setShowClaimModal] = useState(false);
+  const [claimStatus, setClaimStatus] = useState<TransactionStatus>('idle');
+  const [claimTxHash, setClaimTxHash] = useState<string | undefined>();
+  const [claimError, setClaimError] = useState<string | undefined>();
+  const [claimingInvestmentId, setClaimingInvestmentId] = useState<string | null>(null);
 
   const handleConnect = async (walletType: WalletType) => {
     await connect(walletType);
     setIsWalletModalOpen(false);
   };
+
+  /**
+   * Handle claiming tokens for an investment
+   */
+  const handleClaim = async (investmentId: string, poolAddress?: string, vestingAddress?: string) => {
+    setClaimingInvestmentId(investmentId);
+    setShowClaimModal(true);
+    setClaimStatus('pending');
+    setClaimTxHash(undefined);
+    setClaimError(undefined);
+
+    try {
+      let txHash: string | null = null;
+
+      if (vestingAddress) {
+        // Claim from vesting contract
+        // Note: We need the schedule ID - for now assume it's derived from beneficiary
+        txHash = await releaseVesting(vestingAddress, investmentId);
+      } else if (poolAddress) {
+        // Claim from IDO pool
+        txHash = await claimFromPool(poolAddress);
+      } else {
+        // No contract address - show info message
+        setClaimStatus('error');
+        setClaimError('This project does not have an on-chain contract yet. Claims will be available after mainnet deployment.');
+        return;
+      }
+
+      if (txHash) {
+        setClaimTxHash(txHash);
+        setClaimStatus('success');
+        toast.success('Tokens claimed successfully!');
+        // Refresh investments list
+        refreshInvestments?.();
+      } else {
+        setClaimStatus('error');
+        setClaimError('Claim transaction failed or was rejected');
+      }
+    } catch (error: any) {
+      setClaimStatus('error');
+      setClaimError(error.message || 'Failed to claim tokens');
+    }
+  };
+
+  const currentChainId = chainId || DEFAULT_CHAIN_ID;
+  const claimExplorerUrl = claimTxHash ? getExplorerTxUrl(currentChainId, claimTxHash) : undefined;
 
   // Connect wallet prompt
   if (!isConnected) {
@@ -429,12 +487,18 @@ export const Dashboard = () => {
                             <motion.button
                               whileHover={{ scale: 1.05 }}
                               whileTap={{ scale: 0.95 }}
-                              className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-primary-500 to-accent-500 px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
+                              onClick={() => handleClaim(
+                                investment.id,
+                                investment.project?.contract_address || undefined,
+                                investment.project?.vesting_address || undefined
+                              )}
+                              disabled={claimingInvestmentId === investment.id}
+                              className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-primary-500 to-accent-500 px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
                             >
                               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" />
                               </svg>
-                              Claim
+                              {claimingInvestmentId === investment.id ? 'Claiming...' : 'Claim'}
                             </motion.button>
                           ) : (
                             <span className="text-sm text-slate-500">—</span>
@@ -462,6 +526,26 @@ export const Dashboard = () => {
           Tokens are claimable after the project's vesting period. Check each project for details.
         </span>
       </motion.div>
+
+      {/* Claim Transaction Modal */}
+      <TransactionModal
+        isOpen={showClaimModal}
+        onClose={() => {
+          setShowClaimModal(false);
+          setClaimingInvestmentId(null);
+        }}
+        status={claimStatus}
+        title="Claim Tokens"
+        txHash={claimTxHash}
+        explorerUrl={claimExplorerUrl}
+        errorMessage={claimError}
+        onRetry={() => {
+          setClaimStatus('idle');
+          setClaimError(undefined);
+          setShowClaimModal(false);
+          setClaimingInvestmentId(null);
+        }}
+      />
     </motion.div>
   );
 };

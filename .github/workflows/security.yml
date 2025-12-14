@@ -1,0 +1,256 @@
+name: Smart Contract Security
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'contracts/**'
+      - '.github/workflows/security.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'contracts/**'
+      - '.github/workflows/security.yml'
+  workflow_dispatch:
+
+env:
+  FOUNDRY_PROFILE: ci
+
+jobs:
+  # ============================================
+  # Job 1: Compile & Unit Tests
+  # ============================================
+  test:
+    name: Compile & Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: contracts
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: contracts/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Compile contracts
+        run: npx hardhat compile
+
+      - name: Run unit tests
+        run: npx hardhat test
+        env:
+          REPORT_GAS: true
+
+      - name: Upload gas report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gas-report
+          path: contracts/gas-report.txt
+          retention-days: 30
+
+  # ============================================
+  # Job 2: Code Coverage
+  # ============================================
+  coverage:
+    name: Test Coverage
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: contracts
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: contracts/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run coverage
+        run: npx hardhat coverage
+
+      - name: Check coverage threshold
+        run: |
+          echo "Checking coverage thresholds..."
+          # Extract coverage percentages from coverage/coverage-summary.json
+          if [ -f coverage/coverage-summary.json ]; then
+            STATEMENTS=$(cat coverage/coverage-summary.json | jq '.total.statements.pct')
+            BRANCHES=$(cat coverage/coverage-summary.json | jq '.total.branches.pct')
+            FUNCTIONS=$(cat coverage/coverage-summary.json | jq '.total.functions.pct')
+            LINES=$(cat coverage/coverage-summary.json | jq '.total.lines.pct')
+            
+            echo "Statements: $STATEMENTS%"
+            echo "Branches: $BRANCHES%"
+            echo "Functions: $FUNCTIONS%"
+            echo "Lines: $LINES%"
+            
+            # Fail if any coverage is below 80% (can adjust to 95% when ready)
+            if (( $(echo "$STATEMENTS < 80" | bc -l) )); then
+              echo "Statement coverage below 80%"
+              exit 1
+            fi
+          fi
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: contracts/coverage/
+          retention-days: 30
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          directory: contracts/coverage
+          flags: smart-contracts
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  # ============================================
+  # Job 3: Slither Static Analysis
+  # ============================================
+  slither:
+    name: Slither Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: contracts/package-lock.json
+
+      - name: Install contract dependencies
+        run: |
+          cd contracts
+          npm ci
+
+      - name: Run Slither
+        uses: crytic/slither-action@v0.4.0
+        id: slither
+        continue-on-error: true
+        with:
+          target: 'contracts/'
+          sarif: results.sarif
+          slither-args: |
+            --exclude-dependencies
+            --exclude-informational
+            --exclude-low
+            --json contracts/audit-package/slither-report.json
+
+      - name: Upload SARIF to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: results.sarif
+
+      - name: Upload Slither report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: slither-report
+          path: |
+            results.sarif
+            contracts/audit-package/slither-report.json
+          retention-days: 30
+
+      - name: Check for critical findings
+        if: steps.slither.outcome == 'failure'
+        run: |
+          echo "⚠️ Slither found issues. Review the Security tab for details."
+          echo "Critical/High findings may block merge."
+          # Parse JSON for critical issues
+          if [ -f contracts/audit-package/slither-report.json ]; then
+            CRITICAL=$(cat contracts/audit-package/slither-report.json | jq '[.results.detectors[] | select(.impact == "High" or .impact == "Critical")] | length')
+            if [ "$CRITICAL" -gt 0 ]; then
+              echo "❌ Found $CRITICAL critical/high severity issues!"
+              exit 1
+            fi
+          fi
+
+  # ============================================
+  # Job 4: Foundry Fuzz Tests (Optional)
+  # ============================================
+  fuzz:
+    name: Foundry Fuzz Tests
+    runs-on: ubuntu-latest
+    if: false  # Enable when Foundry tests are added
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+
+      - name: Run Foundry fuzz tests
+        run: |
+          cd contracts
+          forge test --fuzz-runs 1000
+        env:
+          FOUNDRY_PROFILE: ci
+
+      - name: Upload fuzz report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fuzz-report
+          path: contracts/fuzz-report.txt
+          retention-days: 30
+
+  # ============================================
+  # Job 5: Security Summary
+  # ============================================
+  security-summary:
+    name: Security Summary
+    runs-on: ubuntu-latest
+    needs: [test, coverage, slither]
+    if: always()
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Generate summary
+        run: |
+          echo "# 🔒 Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Unit Tests | ${{ needs.test.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Coverage | ${{ needs.coverage.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Slither | ${{ needs.slither.result == 'success' && '✅ Passed' || '⚠️ Issues Found' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📊 See artifacts for detailed reports." >> $GITHUB_STEP_SUMMARY

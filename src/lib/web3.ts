@@ -1,12 +1,196 @@
-import { BrowserProvider, formatEther, parseEther, JsonRpcSigner } from 'ethers';
+import { 
+  BrowserProvider, 
+  JsonRpcProvider,
+  formatEther, 
+  parseEther, 
+  JsonRpcSigner,
+  Contract,
+  type InterfaceAbi
+} from 'ethers';
 import EthereumProvider from '@walletconnect/ethereum-provider';
-import { DEFAULT_CHAIN, CHAIN_CONFIG } from '@/config/web3';
+import { 
+  DEFAULT_CHAIN, 
+  getChainById,
+  isChainSupported as isChainSupportedConfig
+} from '@/config/web3';
 import { useWalletStore } from '@/store/walletStore';
 import toast from 'react-hot-toast';
 import type { WalletType } from '@/components/wallet/WalletModal';
 
 // WalletConnect Project ID - Get from https://cloud.walletconnect.com
 const WALLETCONNECT_PROJECT_ID = (import.meta as any).env?.VITE_WALLETCONNECT_PROJECT_ID || 'demo-project-id';
+
+// ============================================================================
+// Standalone Helper Functions (exported for direct use)
+// ============================================================================
+
+/**
+ * Get a JSON-RPC provider for a specific chain or custom RPC URL
+ * @param rpcUrlOrChainId - RPC URL string or chain ID number
+ * @returns JsonRpcProvider instance
+ */
+export function getProvider(rpcUrlOrChainId?: string | number): JsonRpcProvider {
+  if (typeof rpcUrlOrChainId === 'string') {
+    return new JsonRpcProvider(rpcUrlOrChainId);
+  }
+  
+  const chainId = rpcUrlOrChainId ?? DEFAULT_CHAIN.chainId;
+  const config = getChainById(chainId);
+  
+  if (!config) {
+    throw new Error(`Unsupported chain ID: ${chainId}`);
+  }
+  
+  return new JsonRpcProvider(config.rpcUrl);
+}
+
+/**
+ * Get a contract instance with a provider or signer
+ * @param address - Contract address
+ * @param abi - Contract ABI
+ * @param signerOrProvider - Optional signer or provider (defaults to default chain provider)
+ * @returns Contract instance
+ */
+export function getContract(
+  address: string,
+  abi: InterfaceAbi,
+  signerOrProvider?: JsonRpcSigner | JsonRpcProvider | BrowserProvider
+): Contract {
+  const provider = signerOrProvider ?? getProvider();
+  return new Contract(address, abi, provider);
+}
+
+/**
+ * Get a contract instance connected to a signer for write operations
+ * @param address - Contract address
+ * @param abi - Contract ABI
+ * @param signer - JsonRpcSigner for transactions
+ * @returns Contract instance connected to signer
+ */
+export function getSignedContract(
+  address: string,
+  abi: InterfaceAbi,
+  signer: JsonRpcSigner
+): Contract {
+  return new Contract(address, abi, signer);
+}
+
+/**
+ * Get block explorer URL for a transaction
+ * @param txHash - Transaction hash
+ * @param chainId - Chain ID (defaults to current chain)
+ * @returns Full URL to view transaction on block explorer
+ */
+export function getExplorerTxUrl(txHash: string, chainId?: number): string {
+  const id = chainId ?? useWalletStore.getState().chainId ?? DEFAULT_CHAIN.chainId;
+  const config = getChainById(id);
+  const baseUrl = config?.blockExplorer ?? DEFAULT_CHAIN.blockExplorer;
+  return `${baseUrl}/tx/${txHash}`;
+}
+
+/**
+ * Get block explorer URL for an address
+ * @param address - Wallet or contract address
+ * @param chainId - Chain ID (defaults to current chain)
+ * @returns Full URL to view address on block explorer
+ */
+export function getExplorerAddressUrl(address: string, chainId?: number): string {
+  const id = chainId ?? useWalletStore.getState().chainId ?? DEFAULT_CHAIN.chainId;
+  const config = getChainById(id);
+  const baseUrl = config?.blockExplorer ?? DEFAULT_CHAIN.blockExplorer;
+  return `${baseUrl}/address/${address}`;
+}
+
+/**
+ * Get block explorer URL for a token
+ * @param tokenAddress - Token contract address
+ * @param chainId - Chain ID (defaults to current chain)
+ * @returns Full URL to view token on block explorer
+ */
+export function getExplorerTokenUrl(tokenAddress: string, chainId?: number): string {
+  const id = chainId ?? useWalletStore.getState().chainId ?? DEFAULT_CHAIN.chainId;
+  const config = getChainById(id);
+  const baseUrl = config?.blockExplorer ?? DEFAULT_CHAIN.blockExplorer;
+  return `${baseUrl}/token/${tokenAddress}`;
+}
+
+/**
+ * Switch to a target network if not already connected
+ * Uses web3Service internally for the actual switch
+ * @param targetChainId - The chain ID to switch to
+ * @returns true if switch was successful or already on correct chain
+ */
+export async function switchNetworkIfNeeded(targetChainId: number): Promise<boolean> {
+  const currentChainId = useWalletStore.getState().chainId;
+  
+  // Already on the target chain
+  if (currentChainId === targetChainId) {
+    return true;
+  }
+  
+  // Check if target chain is supported
+  if (!isChainSupportedConfig(targetChainId)) {
+    toast.error(`Chain ID ${targetChainId} is not supported`);
+    return false;
+  }
+  
+  // Use web3Service to switch (defined below)
+  try {
+    await web3Service.switchNetwork(targetChainId);
+    return true;
+  } catch (error) {
+    console.error('Failed to switch network:', error);
+    return false;
+  }
+}
+
+/**
+ * Ensure wallet is connected to the default chain
+ * @returns true if connected to default chain or switch was successful
+ */
+export async function ensureDefaultNetwork(): Promise<boolean> {
+  return switchNetworkIfNeeded(DEFAULT_CHAIN.chainId);
+}
+
+/**
+ * Get the current connected chain configuration
+ * @returns Chain configuration or null if not connected
+ */
+export function getCurrentChainConfig() {
+  const chainId = useWalletStore.getState().chainId;
+  return chainId ? getChainById(chainId) : null;
+}
+
+/**
+ * Check if currently connected to a testnet
+ * @returns true if connected to a testnet
+ */
+export function isOnTestnet(): boolean {
+  const config = getCurrentChainConfig();
+  return config?.isTestnet ?? true;
+}
+
+/**
+ * Check if currently connected to a supported mainnet
+ * @returns true if connected to a production network
+ */
+export function isOnMainnet(): boolean {
+  const config = getCurrentChainConfig();
+  return config ? !config.isTestnet : false;
+}
+
+/**
+ * Get native currency symbol for current chain
+ * @returns Native currency symbol (e.g., 'ETH', 'MATIC')
+ */
+export function getNativeCurrencySymbol(): string {
+  const config = getCurrentChainConfig();
+  return config?.nativeCurrency.symbol ?? 'ETH';
+}
+
+// ============================================================================
+// Web3Service Class (singleton for state management)
+// ============================================================================
 
 declare global {
   interface Window {
@@ -286,16 +470,34 @@ class Web3Service {
   }
 
   /**
-   * Switch to the correct network
+   * Switch to the specified network or default network
+   * @param targetChainId - Optional chain ID to switch to (defaults to DEFAULT_CHAIN)
    */
-  async switchNetwork(): Promise<boolean> {
+  async switchNetwork(targetChainId?: number): Promise<boolean> {
     const provider = this.state.rawProvider;
     if (!provider) return false;
+
+    // Get target chain config
+    const chainId = targetChainId ?? DEFAULT_CHAIN.chainId;
+    const targetChain = getChainById(chainId);
+    
+    if (!targetChain) {
+      toast.error(`Unsupported chain ID: ${chainId}`);
+      return false;
+    }
+
+    const chainConfig = {
+      chainId: targetChain.chainIdHex,
+      chainName: targetChain.name,
+      nativeCurrency: targetChain.nativeCurrency,
+      rpcUrls: [targetChain.rpcUrl],
+      blockExplorerUrls: [targetChain.blockExplorer],
+    };
 
     try {
       await provider.request({
         method: 'wallet_switchEthereumChain',
-        params: [{ chainId: CHAIN_CONFIG.chainId }],
+        params: [{ chainId: targetChain.chainIdHex }],
       });
       return true;
     } catch (error: any) {
@@ -304,7 +506,7 @@ class Web3Service {
         try {
           await provider.request({
             method: 'wallet_addEthereumChain',
-            params: [CHAIN_CONFIG],
+            params: [chainConfig],
           });
           return true;
         } catch (addError) {

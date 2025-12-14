@@ -4,16 +4,22 @@ import { motion } from 'framer-motion';
 interface Tab {
   id: string;
   label: string;
-  content: ReactNode;
+  content?: ReactNode;
 }
 
 interface TabsProps {
   tabs: Tab[];
   defaultTab?: string;
+  activeTab?: string;
+  onChange?: (tabId: string) => void;
 }
 
-export const Tabs = ({ tabs, defaultTab }: TabsProps) => {
-  const [activeTab, setActiveTab] = useState(defaultTab || tabs[0]?.id);
+export const Tabs = ({ tabs, defaultTab, activeTab: controlledActiveTab, onChange }: TabsProps) => {
+  const [internalActiveTab, setInternalActiveTab] = useState(defaultTab || tabs[0]?.id);
+  
+  // Use controlled or uncontrolled mode
+  const activeTab = controlledActiveTab !== undefined ? controlledActiveTab : internalActiveTab;
+  const setActiveTab = onChange || setInternalActiveTab;
 
   const activeTabContent = tabs.find(tab => tab.id === activeTab)?.content;
 
@@ -42,14 +48,16 @@ export const Tabs = ({ tabs, defaultTab }: TabsProps) => {
           </button>
         ))}
       </div>
-      <motion.div
-        key={activeTab}
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.2 }}
-      >
-        {activeTabContent}
-      </motion.div>
+      {activeTabContent && (
+        <motion.div
+          key={activeTab}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.2 }}
+        >
+          {activeTabContent}
+        </motion.div>
+      )}
     </div>
   );
 };

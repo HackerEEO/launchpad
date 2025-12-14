@@ -7,6 +7,8 @@ export interface Project {
   token_name: string;
   token_symbol: string;
   token_address: string | null;
+  contract_address?: string | null;
+  vesting_address?: string | null;
   total_supply: number;
   token_price: number;
   hard_cap: number;

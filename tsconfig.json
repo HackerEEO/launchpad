@@ -24,5 +24,6 @@
     }
   },
   "include": ["src"],
+  "exclude": ["supabase/functions", "node_modules", "dist", ".vercel"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

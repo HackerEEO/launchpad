@@ -1,0 +1,23 @@
+{
+  "name": "cryptolaunch-subgraph",
+  "version": "1.0.0",
+  "description": "The Graph subgraph for CryptoLaunch IDO platform - indexes Investment and TokensClaimed events",
+  "license": "MIT",
+  "scripts": {
+    "codegen": "graph codegen",
+    "build": "graph build",
+    "deploy:local": "graph deploy --node http://localhost:8020/ --ipfs http://localhost:5001 cryptolaunch/ido",
+    "deploy:hosted": "graph deploy --node https://api.thegraph.com/deploy/ --access-token $GRAPH_ACCESS_TOKEN $SUBGRAPH_NAME",
+    "deploy:studio": "graph deploy --studio $SUBGRAPH_NAME",
+    "create:local": "graph create --node http://localhost:8020/ cryptolaunch/ido",
+    "remove:local": "graph remove --node http://localhost:8020/ cryptolaunch/ido",
+    "test": "graph test"
+  },
+  "dependencies": {
+    "@graphprotocol/graph-cli": "^0.68.0",
+    "@graphprotocol/graph-ts": "^0.32.0"
+  },
+  "devDependencies": {
+    "matchstick-as": "^0.6.0"
+  }
+}
