@@ -7,11 +7,10 @@ export interface VestingSchedule {
   beneficiary: string;
   totalAmount: bigint;
   releasedAmount: bigint;
-  tgePercent: number;
-  startTime: number;
+  tgeAmount: bigint;
+  tgeTimestamp: number;
   cliffDuration: number;
   vestingDuration: number;
-  revocable: boolean;
   revoked: boolean;
 }
 
@@ -76,13 +75,12 @@ export function useVesting(): UseVestingReturn {
       return {
         beneficiary: schedule[0],
         totalAmount: schedule[1],
-        releasedAmount: schedule[2],
-        tgePercent: Number(schedule[3]),
-        startTime: Number(schedule[4]),
-        cliffDuration: Number(schedule[5]),
-        vestingDuration: Number(schedule[6]),
-        revocable: schedule[7],
-        revoked: schedule[8],
+        tgeAmount: schedule[2],
+        tgeTimestamp: Number(schedule[3]),
+        cliffDuration: Number(schedule[4]),
+        vestingDuration: Number(schedule[5]),
+        releasedAmount: schedule[6],
+        revoked: schedule[7],
       };
     } catch (err: any) {
       setError(err.message || 'Failed to get schedule');
@@ -100,7 +98,9 @@ export function useVesting(): UseVestingReturn {
       const contract = await getContract(vestingAddress);
       if (!contract) return null;
 
-      return await contract.computeVestingScheduleId(beneficiary, index);
+  // The TokenVesting contract exposes schedule IDs via getScheduleIds
+  const ids: string[] = await contract.getScheduleIds(beneficiary);
+  return ids[index] ?? null;
     } catch (err: any) {
       setError(err.message || 'Failed to get schedule ID');
       return null;
@@ -133,7 +133,7 @@ export function useVesting(): UseVestingReturn {
       const contract = await getContract(vestingAddress);
       if (!contract) return BigInt(0);
 
-      return await contract.computeReleasableAmount(scheduleId);
+  return await contract.releasableAmount(scheduleId);
     } catch (err: any) {
       setError(err.message || 'Failed to get releasable amount');
       return BigInt(0);
@@ -149,7 +149,7 @@ export function useVesting(): UseVestingReturn {
       const contract = await getContract(vestingAddress);
       if (!contract) return BigInt(0);
 
-      return await contract.computeVestedAmount(scheduleId);
+  return await contract.vestedAmount(scheduleId);
     } catch (err: any) {
       setError(err.message || 'Failed to get vested amount');
       return BigInt(0);
@@ -165,17 +165,12 @@ export function useVesting(): UseVestingReturn {
       const contract = await getContract(vestingAddress);
       if (!contract) return [];
 
-      const count = await getScheduleCount(vestingAddress, beneficiary);
+      const ids: string[] = await contract.getScheduleIds(beneficiary);
       const schedules: VestingSchedule[] = [];
 
-      for (let i = 0; i < count; i++) {
-        const scheduleId = await getScheduleId(vestingAddress, beneficiary, i);
-        if (scheduleId) {
-          const schedule = await getSchedule(vestingAddress, scheduleId);
-          if (schedule) {
-            schedules.push(schedule);
-          }
-        }
+      for (const id of ids) {
+        const schedule = await getSchedule(vestingAddress, id);
+        if (schedule) schedules.push(schedule);
       }
 
       return schedules;
@@ -220,34 +215,9 @@ export function useVesting(): UseVestingReturn {
     scheduleId: string,
     newBeneficiary: string
   ): Promise<string | null> => {
-    if (!isConnected || !address) {
-      setError('Wallet not connected');
-      return null;
-    }
-
-    if (!ethers.isAddress(newBeneficiary)) {
-      setError('Invalid beneficiary address');
-      return null;
-    }
-
-    try {
-      setLoading(true);
-      setError(null);
-
-      const contract = await getContract(vestingAddress, true);
-      if (!contract) return null;
-
-      const tx = await contract.transferBeneficiary(scheduleId, newBeneficiary);
-      const receipt = await tx.wait();
-
-      return receipt.hash;
-    } catch (err: any) {
-      const message = err.reason || err.message || 'Transfer failed';
-      setError(message);
-      return null;
-    } finally {
-      setLoading(false);
-    }
+    // Not implemented in current TokenVesting contract
+    setError('transferBeneficiary is not supported by the current contract');
+    return null;
   }, [getContract, isConnected, address]);
 
   return {

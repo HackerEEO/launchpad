@@ -64,9 +64,9 @@ contract IDOPoolFuzzTest is Test {
         // Mint tokens to pool
         saleToken.mint(address(pool), 1000000 ether);
         
-        // Setup whitelist
-        whitelist.addToWhitelist(investor1);
-        whitelist.addToWhitelist(investor2);
+    // Setup whitelist (use Bronze tier)
+    whitelist.addToWhitelist(investor1, Whitelist.Tier.Bronze);
+    whitelist.addToWhitelist(investor2, Whitelist.Tier.Bronze);
         pool.setWhitelist(address(whitelist), true);
         
         // Fund investors
@@ -137,7 +137,7 @@ contract IDOPoolFuzzTest is Test {
         
         for (uint256 i = 0; i < numInvestors; i++) {
             address investor = makeAddr(string(abi.encodePacked("inv", i)));
-            whitelist.addToWhitelist(investor);
+            whitelist.addToWhitelist(investor, Whitelist.Tier.Bronze);
             vm.deal(investor, MAX_INVESTMENT + 1 ether);
             
             vm.prank(investor);
@@ -278,7 +278,7 @@ contract IDOPoolFuzzTest is Test {
         
         for (uint256 i = 0; i < amounts.length && i < 10; i++) {
             address investor = makeAddr(string(abi.encodePacked("investor", i)));
-            whitelist.addToWhitelist(investor);
+            whitelist.addToWhitelist(investor, Whitelist.Tier.Bronze);
             vm.deal(investor, 100 ether);
             
             uint256 amount = bound(amounts[i], MIN_INVESTMENT, MAX_INVESTMENT);
@@ -336,8 +336,8 @@ contract IDOPoolFuzzTest is Test {
         vm.expectRevert();
         pool.invest{value: 1 ether}();
         
-        // After whitelisting, should work
-        whitelist.addToWhitelist(randomAddr);
+    // After whitelisting, should work (Bronze tier)
+    whitelist.addToWhitelist(randomAddr, Whitelist.Tier.Bronze);
         
         vm.prank(randomAddr);
         pool.invest{value: 1 ether}();

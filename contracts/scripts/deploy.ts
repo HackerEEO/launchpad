@@ -103,7 +103,7 @@ async function main() {
 
   // 4. Deploy LaunchpadFactory
   console.log("\n🏭 Deploying LaunchpadFactory...");
-  const LaunchpadFactory = await ethers.getContractFactory("LaunchpadFactory");
+  const LaunchpadFactory = await ethers.getContractFactory("src/LaunchpadFactory_FIXED.sol:LaunchpadFactory");
   const factory = await LaunchpadFactory.deploy(
     deployer.address,
     feeCollector,
